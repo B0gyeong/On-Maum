@@ -72,6 +72,17 @@ public class AuthController {
         return authService.checkEmail(email);
     }
 
+    @Operation(summary = "대상자 계정 대리 생성",
+            description = "담당자가 대상자 몫으로 신원만 만든다. 비밀번호는 만들지 않으므로 "
+                    + "로그인은 불가능하지만 UUID가 생겨 알림 수신자로 지정할 수 있다. "
+                    + "이메일을 주지 않으면 내부용 주소를 생성한다. 기관 소속 계정만 호출할 수 있다.")
+    @PostMapping("/users")
+    @ResponseStatus(HttpStatus.CREATED)
+    public AuthDtos.ProfileResponse createProxyUser(
+            @Valid @RequestBody AuthDtos.ProxyUserRequest request) {
+        return authService.createProxyUser(currentUser.id(), request);
+    }
+
     @Operation(summary = "내 정보",
             description = "프로필 + 내가 접근 가능한 가구 목록(관계 포함). 로그인 직후 화면 구성의 기준.")
     @GetMapping("/me")

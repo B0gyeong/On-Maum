@@ -2,6 +2,7 @@ package com.nilm.device.service;
 
 import com.nilm.device.api.dto.AuthDtos;
 import com.nilm.device.common.DuplicateResourceException;
+import com.nilm.device.common.ForbiddenException;
 import com.nilm.device.common.InvalidOperationException;
 import com.nilm.device.common.NotFoundException;
 import com.nilm.device.domain.ManagerRegistrationOutbox;
@@ -155,6 +156,53 @@ public class AuthService {
         }
         keycloak.resetPassword(userId, request.newPassword());
         keycloak.logoutAllSessions(userId);
+    }
+
+    /**
+     * 대리 계정 생성 — 담당자가 대상자 몫으로 신원만 만든다.
+     *
+     * <p>대상자는 대부분 앱을 쓰지 않지만 <b>신원은 있어야 한다.</b> monitoring이
+     * 알림 수신자를 {@code subjects.auth_sub}로 식별하는데, 이 값이 비면 위험을
+     * 감지해도 알림이 만들어지지 않고 로그만 남는다.
+     *
+     * <p>비밀번호는 만들지 않는다. 담당자가 대신 정하면 그 값을 누가 보관할지가
+     * 문제가 되기 때문이다. 대상자가 직접 앱을 쓰겠다고 하면 그때 자격증명을 연다.
+     */
+    @Transactional
+    public AuthDtos.ProfileResponse createProxyUser(UUID callerId, AuthDtos.ProxyUserRequest request) {
+        UserProfile caller = profileRepository.findById(callerId)
+                .orElseThrow(() -> new NotFoundException("프로필", callerId));
+        // 기관 소속만 대리 생성할 수 있다. 개인 계정이 남의 신원을 만들 수 있으면 안 된다.
+        if (caller.getOrganization() == null || caller.getOrganization().isBlank()) {
+            throw new ForbiddenException("기관 소속 담당자만 대상자 계정을 만들 수 있습니다");
+        }
+
+        String email = request.email() == null || request.email().isBlank()
+                ? generateInternalEmail()
+                : normalizeEmail(request.email());
+        if (profileRepository.existsByEmail(email)) {
+            throw new DuplicateResourceException("계정", email);
+        }
+
+        UUID userId = keycloak.createUserWithoutCredentials(email, request.displayName());
+        try {
+            // organization은 비운다 — 대상자는 담당자가 아니므로 담당자 명단에 올리지 않는다.
+            return AuthDtos.ProfileResponse.from(profileRepository.save(new UserProfile(
+                    userId, email, request.displayName(), request.phone(), null)));
+        } catch (RuntimeException e) {
+            log.warn("프로필 저장 실패로 Keycloak 계정을 보상 삭제합니다: {}", userId);
+            keycloak.deleteUser(userId);
+            throw e;
+        }
+    }
+
+    /**
+     * 이메일 없는 대상자용 내부 식별자.
+     * Keycloak은 사용자명을 요구하는데 어르신 대부분은 이메일이 없다.
+     * 실제로 보낼 수 있는 주소가 아님이 드러나도록 전용 도메인을 쓴다.
+     */
+    private String generateInternalEmail() {
+        return "subject-" + UUID.randomUUID().toString().substring(0, 12) + "@no-email.nilm.local";
     }
 
     /** 로그인 직후 화면 구성 기준 — 내 프로필 + 접근 가능한 가구 목록 */
