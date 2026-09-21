@@ -72,6 +72,20 @@ public final class AuthDtos {
     ) {
     }
 
+    /**
+     * 대리 계정 생성 — 담당자가 대상자 몫으로 신원만 만든다.
+     * 이메일은 선택이다. 어르신 대부분은 이메일이 없으므로 없으면 내부용을 만들어 쓴다.
+     */
+    public record ProxyUserRequest(
+            @NotBlank @Size(max = 50)
+            String displayName,
+            @Size(max = 20)
+            String phone,
+            @Email @Size(max = 100)
+            String email
+    ) {
+    }
+
     public record TokenResponse(
             String accessToken,
             String refreshToken,
