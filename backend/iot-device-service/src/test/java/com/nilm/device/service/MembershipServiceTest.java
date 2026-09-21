@@ -70,7 +70,7 @@ class MembershipServiceTest {
         when(memberRepository.existsById(any())).thenReturn(true);
 
         assertThrows(DuplicateResourceException.class, () -> service.add(
-                HOUSE, USER, HouseholdMember.Relation.GUARDIAN,
+                HOUSE, USER, HouseholdMember.Relation.STAFF,
                 HouseholdMember.NotifyPriority.SECONDARY, "010-1111-2222"));
         verify(memberRepository, never()).save(any());
     }
@@ -92,7 +92,7 @@ class MembershipServiceTest {
     @Test
     @DisplayName("멤버가 둘 이상이면 해제할 수 있다")
     void removesWhenOtherMemberRemains() {
-        HouseholdMember target = member(USER, HouseholdMember.Relation.GUARDIAN);
+        HouseholdMember target = member(USER, HouseholdMember.Relation.STAFF);
         when(householdRepository.existsById(HOUSE)).thenReturn(true);
         when(memberRepository.existsById(any())).thenReturn(true);
         when(memberRepository.findById(any())).thenReturn(java.util.Optional.of(target));
@@ -123,7 +123,7 @@ class MembershipServiceTest {
     @DisplayName("가구 정보를 찾지 못해도 목록 조회가 실패하지 않는다 — 별칭만 비어서 나온다")
     void myHouseholdsToleratesMissingHousehold() {
         when(memberRepository.findByKeycloakUserIdOrderByJoinedAtAsc(USER))
-                .thenReturn(List.of(member(USER, HouseholdMember.Relation.GUARDIAN)));
+                .thenReturn(List.of(member(USER, HouseholdMember.Relation.STAFF)));
         when(householdRepository.findAllById(List.of(HOUSE))).thenReturn(List.of());
 
         var result = service.myHouseholds(USER);

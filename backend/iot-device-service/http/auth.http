@@ -68,14 +68,14 @@ X-User-Id: {{signup.response.body.userId}}
   "graceMinutes": 120
 }
 
-### 6. 초대 코드 발급 (보호자용, 기본 72시간·1회용)
+### 6. 초대 코드 발급 (담당자용, 기본 72시간·1회용)
 # @name invite
 POST {{host}}/api/devices/households/{{household.response.body.houseId}}/invites
 Content-Type: application/json
 X-User-Id: {{signup.response.body.userId}}
 
 {
-  "relation": "GUARDIAN",
+  "relation": "STAFF",
   "expiresInHours": 72
 }
 

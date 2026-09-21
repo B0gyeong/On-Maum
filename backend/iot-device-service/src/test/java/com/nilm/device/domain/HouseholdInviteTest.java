@@ -19,7 +19,7 @@ class HouseholdInviteTest {
 
     private HouseholdInvite invite(OffsetDateTime expiresAt) {
         return new HouseholdInvite("ABCD2345", "H001",
-                HouseholdMember.Relation.GUARDIAN, CREATOR, expiresAt);
+                HouseholdMember.Relation.STAFF, CREATOR, expiresAt);
     }
 
     @Test

@@ -51,7 +51,7 @@ class InviteServiceTest {
 
     private HouseholdInvite invite(OffsetDateTime expiresAt) {
         return new HouseholdInvite("ABCD2345", HOUSE,
-                HouseholdMember.Relation.GUARDIAN, CREATOR, expiresAt);
+                HouseholdMember.Relation.STAFF, CREATOR, expiresAt);
     }
 
     @Test
@@ -62,7 +62,7 @@ class InviteServiceTest {
 
         ArgumentCaptor<HouseholdInvite> saved = ArgumentCaptor.forClass(HouseholdInvite.class);
         service.create(HOUSE, new InviteDtos.CreateRequest(
-                HouseholdMember.Relation.GUARDIAN, 24), CREATOR);
+                HouseholdMember.Relation.STAFF, 24), CREATOR);
         verify(inviteRepository).save(saved.capture());
 
         String code = saved.getValue().getCode();
@@ -78,7 +78,7 @@ class InviteServiceTest {
 
         OffsetDateTime before = OffsetDateTime.now(ZoneOffset.UTC);
         var response = service.create(HOUSE,
-                new InviteDtos.CreateRequest(HouseholdMember.Relation.GUARDIAN, null), CREATOR);
+                new InviteDtos.CreateRequest(HouseholdMember.Relation.STAFF, null), CREATOR);
 
         assertTrue(response.expiresAt().isAfter(before.plusHours(71)));
         assertTrue(response.expiresAt().isBefore(before.plusHours(73)));
@@ -91,7 +91,7 @@ class InviteServiceTest {
                 .when(membershipService).requireMember(eq(HOUSE), any());
 
         assertThrows(com.nilm.device.common.ForbiddenException.class, () -> service.create(
-                HOUSE, new InviteDtos.CreateRequest(HouseholdMember.Relation.GUARDIAN, 24), CREATOR));
+                HOUSE, new InviteDtos.CreateRequest(HouseholdMember.Relation.STAFF, 24), CREATOR));
         verify(inviteRepository, never()).save(any());
     }
 
@@ -101,16 +101,16 @@ class InviteServiceTest {
         HouseholdInvite target = invite(OffsetDateTime.now(ZoneOffset.UTC).plusHours(10));
         when(inviteRepository.findById("ABCD2345")).thenReturn(Optional.of(target));
         when(membershipService.add(any(), any(), any(), any(), any()))
-                .thenReturn(new HouseholdMember(HOUSE, ACCEPTOR, HouseholdMember.Relation.GUARDIAN,
+                .thenReturn(new HouseholdMember(HOUSE, ACCEPTOR, HouseholdMember.Relation.STAFF,
                         HouseholdMember.NotifyPriority.SECONDARY, "010-1111-2222", true));
 
         var member = service.accept("ABCD2345", new InviteDtos.AcceptRequest("010-1111-2222"), ACCEPTOR);
 
-        assertEquals(HouseholdMember.Relation.GUARDIAN, member.relation());
+        assertEquals(HouseholdMember.Relation.STAFF, member.relation());
         assertNotNull(target.getUsedAt(), "코드가 소비되어야 한다");
         assertEquals(ACCEPTOR, target.getUsedBy());
         verify(membershipService).add(HOUSE, ACCEPTOR,
-                HouseholdMember.Relation.GUARDIAN,
+                HouseholdMember.Relation.STAFF,
                 HouseholdMember.NotifyPriority.SECONDARY, "010-1111-2222");
     }
 
@@ -120,7 +120,7 @@ class InviteServiceTest {
         HouseholdInvite target = invite(OffsetDateTime.now(ZoneOffset.UTC).plusHours(10));
         when(inviteRepository.findById("ABCD2345")).thenReturn(Optional.of(target));
         when(membershipService.add(any(), any(), any(), any(), any()))
-                .thenReturn(new HouseholdMember(HOUSE, ACCEPTOR, HouseholdMember.Relation.GUARDIAN,
+                .thenReturn(new HouseholdMember(HOUSE, ACCEPTOR, HouseholdMember.Relation.STAFF,
                         HouseholdMember.NotifyPriority.SECONDARY, null, true));
 
         service.accept("abcd2345", new InviteDtos.AcceptRequest(null), ACCEPTOR);

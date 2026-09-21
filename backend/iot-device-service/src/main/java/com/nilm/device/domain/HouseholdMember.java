@@ -15,18 +15,22 @@ import java.util.UUID;
 /**
  * 가구 멤버십 — 누가 어느 가구에 어떤 관계로 연결됐는지.
  * 계정(Keycloak)과 가구를 잇는 유일한 연결점이며, 한 사람이 여러 가구에
- * 서로 다른 관계로 속할 수 있다. (예: 내 가구는 SELF, 어머니 가구는 GUARDIAN)
+ * 서로 다른 관계로 속할 수 있다. (예: 내 가구는 SELF, 담당 가구는 STAFF)
  */
 @Entity
 @Table(name = "household_members")
 @IdClass(HouseholdMember.MemberId.class)
 public class HouseholdMember {
 
+    /**
+     * 가족·지인 보호자(GUARDIAN)는 제거했다. 멤버십은 만들 수 있었지만 monitoring 쪽에
+     * 대응 개념이 없어 어떤 데이터도 볼 수 없었고(전 조회 403), 절반만 구현된 역할을
+     * 남겨두면 사용자에게 고장으로 보인다. 도입하려면 두 서비스의 권한 모델을
+     * 함께 설계해야 한다 — docs/권한모델_소유권_결정요청.md 참고.
+     */
     public enum Relation {
         /** 대상자 본인 — 1인 가구 자가 모니터링 */
         SELF,
-        /** 가족·지인 보호자 */
-        GUARDIAN,
         /** 복지사 등 기관 담당자 */
         STAFF
     }
@@ -46,7 +50,7 @@ public class HouseholdMember {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
-    private Relation relation = Relation.GUARDIAN;
+    private Relation relation;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "notify_priority", nullable = false, length = 10)
@@ -68,9 +72,12 @@ public class HouseholdMember {
                            NotifyPriority notifyPriority, String notifyPhone, Boolean notifyEnabled) {
         this.houseId = houseId;
         this.keycloakUserId = keycloakUserId;
-        if (relation != null) {
-            this.relation = relation;
+        // SELF(본인)와 STAFF(기관 담당자) 사이에는 합리적인 기본값이 없다.
+        // 조용히 한쪽으로 정해지면 권한이 잘못 부여되므로 명시를 요구한다.
+        if (relation == null) {
+            throw new IllegalArgumentException("가구와의 관계(relation)는 필수입니다");
         }
+        this.relation = relation;
         if (notifyPriority != null) {
             this.notifyPriority = notifyPriority;
         }

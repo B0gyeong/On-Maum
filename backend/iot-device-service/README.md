@@ -170,7 +170,7 @@ access token이 만료된 뒤에도 호출할 수 있어야 하므로 인증을 
 {
   "profile": { "userId": "...", "displayName": "김복지", "status": "ACTIVE" },
   "households": [
-    { "houseId": "H001", "alias": "어머니 댁", "relation": "GUARDIAN",
+    { "houseId": "H001", "alias": "어머니 댁", "relation": "STAFF",
       "notifyPriority": "PRIMARY", "notifyEnabled": true }
   ]
 }
@@ -200,7 +200,7 @@ access token이 만료된 뒤에도 호출할 수 있어야 하므로 인증을 
 
 수정 가능 필드: `relation`, `notifyPriority`, `notifyPhone`, `notifyEnabled`.
 
-- `relation` — `SELF`(대상자 본인) / `GUARDIAN`(가족·지인) / `STAFF`(기관 담당자)
+- `relation` — `SELF`(대상자 본인) / `STAFF`(복지사 등 기관 담당자). **필수**이며 기본값이 없다
 - `notifyPriority` — `PRIMARY` / `SECONDARY`
 
 **마지막 멤버는 해제할 수 없다.** 해제하면 아무도 접근할 수 없는 가구가 남기 때문이다(`400`).
@@ -215,7 +215,7 @@ access token이 만료된 뒤에도 호출할 수 있어야 하므로 인증을 
 | DELETE | `/invites/{code}` | 회수. 이미 사용된 코드는 회수 불가 |
 
 ```json
-{ "relation": "GUARDIAN", "expiresInHours": 72 }
+{ "relation": "STAFF", "expiresInHours": 72 }
 ```
 
 `expiresInHours`는 1~336, 생략하면 72시간. 코드는 혼동하기 쉬운 문자(`0/O`, `1/I/L`)를
