@@ -45,6 +45,14 @@ public class UserProfile {
     @Column(nullable = false, length = 15)
     private Status status = Status.ACTIVE;
 
+    /**
+     * 초기 비밀번호를 아직 쓰고 있다는 표시.
+     * 담당자가 대리 생성하면 켜지고, 본인이 비밀번호를 바꾸면 꺼진다.
+     * 켜져 있는 동안의 응답은 담당자가 대신 눌렀을 가능성이 있다.
+     */
+    @Column(name = "password_reset_required", nullable = false)
+    private boolean passwordResetRequired = false;
+
     @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
     private OffsetDateTime createdAt;
 
@@ -53,6 +61,11 @@ public class UserProfile {
 
     public UserProfile(UUID keycloakUserId, String email, String displayName,
                        String phone, String organization) {
+        this(keycloakUserId, email, displayName, phone, organization, false);
+    }
+
+    public UserProfile(UUID keycloakUserId, String email, String displayName,
+                       String phone, String organization, boolean passwordResetRequired) {
         this.keycloakUserId = keycloakUserId;
         this.email = email;
         this.displayName = displayName;
@@ -60,6 +73,16 @@ public class UserProfile {
         this.organization = organization;
         // 승인 절차가 없으므로 기관 소속 가입도 바로 활성이다.
         this.status = Status.ACTIVE;
+        this.passwordResetRequired = passwordResetRequired;
+    }
+
+    /** 본인이 비밀번호를 바꾸면 초기 비밀번호 표시를 내린다. */
+    public void clearPasswordResetRequired() {
+        this.passwordResetRequired = false;
+    }
+
+    public boolean isPasswordResetRequired() {
+        return passwordResetRequired;
     }
 
     /**

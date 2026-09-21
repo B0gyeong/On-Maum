@@ -86,6 +86,17 @@ public final class AuthDtos {
     ) {
     }
 
+    /**
+     * 대리 생성 응답 — {@code initialPassword}는 이 응답에서 1회만 노출된다.
+     * 서버에는 Keycloak 해시만 남으므로 분실하면 재발급해야 한다.
+     * 담당자가 대상자에게 구두·서면으로 전달하는 값이라 불러줄 수 있는 형태로 만든다.
+     */
+    public record ProxyUserResponse(
+            ProfileResponse profile,
+            String initialPassword
+    ) {
+    }
+
     public record TokenResponse(
             String accessToken,
             String refreshToken,
@@ -103,11 +114,13 @@ public final class AuthDtos {
             String displayName,
             String phone,
             String organization,
-            UserProfile.Status status
+            UserProfile.Status status,
+            /** 초기 비밀번호 사용 중 — 프론트는 이 값이 true면 변경 화면으로 보낸다. */
+            boolean passwordResetRequired
     ) {
         public static ProfileResponse from(UserProfile p) {
             return new ProfileResponse(p.getKeycloakUserId(), p.getEmail(), p.getDisplayName(),
-                    p.getPhone(), p.getOrganization(), p.getStatus());
+                    p.getPhone(), p.getOrganization(), p.getStatus(), p.isPasswordResetRequired());
         }
     }
 

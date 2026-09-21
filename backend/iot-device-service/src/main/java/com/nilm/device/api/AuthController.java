@@ -73,12 +73,13 @@ public class AuthController {
     }
 
     @Operation(summary = "대상자 계정 대리 생성",
-            description = "담당자가 대상자 몫으로 신원만 만든다. 비밀번호는 만들지 않으므로 "
-                    + "로그인은 불가능하지만 UUID가 생겨 알림 수신자로 지정할 수 있다. "
+            description = "담당자가 대상자 몫으로 계정을 만들고 초기 비밀번호를 받아 간다. "
+                    + "initialPassword는 이 응답에서 1회만 노출되며 담당자가 대상자에게 전달한다. "
+                    + "대상자가 바꾸기 전까지 passwordResetRequired가 켜져 있다. "
                     + "이메일을 주지 않으면 내부용 주소를 생성한다. 기관 소속 계정만 호출할 수 있다.")
     @PostMapping("/users")
     @ResponseStatus(HttpStatus.CREATED)
-    public AuthDtos.ProfileResponse createProxyUser(
+    public AuthDtos.ProxyUserResponse createProxyUser(
             @Valid @RequestBody AuthDtos.ProxyUserRequest request) {
         return authService.createProxyUser(currentUser.id(), request);
     }

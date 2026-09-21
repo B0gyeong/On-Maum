@@ -487,6 +487,9 @@ mqtt_tools/config/passwd
 
 # Deployment secrets and generated files
 infrastructure/**/passwd
+# iot-device-service가 device_acl 테이블에서 생성하는 파생물.
+# 커밋하면 특정 개발자의 로컬 기기 목록이 브로커의 실제 접근 권한을 결정하게 된다.
+infrastructure/**/acl.device
 infrastructure/**/certs/
 *.env
 !*.env.example

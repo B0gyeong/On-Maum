@@ -48,6 +48,8 @@ class AuthServiceTest {
     private ManagerRegistrationOutboxRepository outboxRepository;
     @Mock
     private MembershipService membershipService;
+    @Mock
+    private ReadableSecretGenerator secretGenerator;
 
     @InjectMocks
     private AuthService authService;
@@ -132,21 +134,22 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("기관 소속 담당자는 대상자 신원을 만들 수 있다 — 비밀번호는 만들지 않는다")
-    void proxyUserCreatedWithoutCredentials() {
+    @DisplayName("담당자는 대상자 계정을 만들고 초기 비밀번호를 1회 받아 간다")
+    void proxyUserIssuesInitialPassword() {
         when(profileRepository.findById(USER)).thenReturn(Optional.of(staffProfile()));
         when(profileRepository.existsByEmail(anyString())).thenReturn(false);
-        when(keycloak.createUserWithoutCredentials(anyString(), eq("박어르신")))
+        when(secretGenerator.generate()).thenReturn("KMPX-4R7T-BJQW");
+        when(keycloak.createUser(anyString(), eq("KMPX-4R7T-BJQW"), eq("박어르신")))
                 .thenReturn(UUID.randomUUID());
         when(profileRepository.save(any(UserProfile.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        AuthDtos.ProfileResponse result = authService.createProxyUser(
+        AuthDtos.ProxyUserResponse result = authService.createProxyUser(
                 USER, new AuthDtos.ProxyUserRequest("박어르신", "010-2222-3333", null));
 
-        assertEquals("박어르신", result.displayName());
-        assertNull(result.organization(), "대상자는 담당자가 아니므로 소속을 남기지 않는다");
-        verify(keycloak, never()).createUser(anyString(), anyString(), anyString());
+        assertEquals("KMPX-4R7T-BJQW", result.initialPassword(), "담당자가 전달할 값이라 1회 노출한다");
+        assertTrue(result.profile().passwordResetRequired(), "본인이 바꾸기 전까지 켜져 있어야 한다");
+        assertNull(result.profile().organization(), "대상자는 담당자가 아니므로 소속을 남기지 않는다");
     }
 
     @Test
@@ -154,19 +157,21 @@ class AuthServiceTest {
     void proxyUserGetsInternalEmail() {
         when(profileRepository.findById(USER)).thenReturn(Optional.of(staffProfile()));
         when(profileRepository.existsByEmail(anyString())).thenReturn(false);
-        when(keycloak.createUserWithoutCredentials(anyString(), anyString()))
+        when(secretGenerator.generate()).thenReturn("KMPX-4R7T-BJQW");
+        when(keycloak.createUser(anyString(), anyString(), anyString()))
                 .thenReturn(UUID.randomUUID());
         when(profileRepository.save(any(UserProfile.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        AuthDtos.ProfileResponse result = authService.createProxyUser(
+        AuthDtos.ProxyUserResponse result = authService.createProxyUser(
                 USER, new AuthDtos.ProxyUserRequest("박어르신", null, null));
 
-        assertTrue(result.email().endsWith("@no-email.nilm.local"), result.email());
+        assertTrue(result.profile().email().endsWith("@no-email.nilm.local"),
+                result.profile().email());
     }
 
     @Test
-    @DisplayName("기관 소속이 아니면 남의 신원을 만들 수 없다")
+    @DisplayName("기관 소속이 아니면 남의 계정을 만들 수 없다")
     void proxyUserRejectedForNonStaff() {
         when(profileRepository.findById(USER)).thenReturn(Optional.of(
                 new UserProfile(USER, EMAIL, "홍길동", null, null)));
@@ -174,7 +179,18 @@ class AuthServiceTest {
         assertThrows(ForbiddenException.class, () -> authService.createProxyUser(
                 USER, new AuthDtos.ProxyUserRequest("박어르신", null, null)));
 
-        verify(keycloak, never()).createUserWithoutCredentials(anyString(), anyString());
+        verify(keycloak, never()).createUser(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("본인이 비밀번호를 바꾸면 초기 비밀번호 표시가 내려간다")
+    void changePasswordClearsResetFlag() {
+        UserProfile profile = new UserProfile(USER, EMAIL, "박어르신", null, null, true);
+        when(profileRepository.findById(USER)).thenReturn(Optional.of(profile));
+
+        authService.changePassword(USER, new AuthDtos.ChangePasswordRequest("KMPX-4R7T-BJQW", "my-own-pass"));
+
+        assertFalse(profile.isPasswordResetRequired());
     }
 
     // ── 비밀번호 변경 ──────────────────────────────────────

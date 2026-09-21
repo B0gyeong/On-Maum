@@ -32,15 +32,18 @@ public class AuthService {
     private final UserProfileRepository profileRepository;
     private final ManagerRegistrationOutboxRepository outboxRepository;
     private final MembershipService membershipService;
+    private final ReadableSecretGenerator secretGenerator;
 
     public AuthService(KeycloakAdminClient keycloak,
                        UserProfileRepository profileRepository,
                        ManagerRegistrationOutboxRepository outboxRepository,
-                       MembershipService membershipService) {
+                       MembershipService membershipService,
+                       ReadableSecretGenerator secretGenerator) {
         this.keycloak = keycloak;
         this.profileRepository = profileRepository;
         this.outboxRepository = outboxRepository;
         this.membershipService = membershipService;
+        this.secretGenerator = secretGenerator;
     }
 
     /**
@@ -143,6 +146,7 @@ public class AuthService {
      * <p>변경 후 모든 세션을 끊는다. 이전 비밀번호로 발급된 토큰이 살아 있으면
      * 비밀번호를 바꾼 의미가 없기 때문이며, 호출자 본인도 다시 로그인해야 한다.
      */
+    @Transactional
     public void changePassword(UUID userId, AuthDtos.ChangePasswordRequest request) {
         UserProfile profile = profileRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("프로필", userId));
@@ -156,20 +160,28 @@ public class AuthService {
         }
         keycloak.resetPassword(userId, request.newPassword());
         keycloak.logoutAllSessions(userId);
+        // 본인이 바꿨으므로 초기 비밀번호 표시를 내린다.
+        profile.clearPasswordResetRequired();
     }
 
     /**
-     * 대리 계정 생성 — 담당자가 대상자 몫으로 신원만 만든다.
+     * 대리 계정 생성 — 담당자가 대상자 몫으로 계정을 만들고 초기 비밀번호를 받아 간다.
      *
      * <p>대상자는 대부분 앱을 쓰지 않지만 <b>신원은 있어야 한다.</b> monitoring이
      * 알림 수신자를 {@code subjects.auth_sub}로 식별하는데, 이 값이 비면 위험을
      * 감지해도 알림이 만들어지지 않고 로그만 남는다.
      *
-     * <p>비밀번호는 만들지 않는다. 담당자가 대신 정하면 그 값을 누가 보관할지가
-     * 문제가 되기 때문이다. 대상자가 직접 앱을 쓰겠다고 하면 그때 자격증명을 연다.
+     * <p>초기 비밀번호는 <b>서버가 생성한다.</b> 담당자가 직접 정하면 여러 대상자에게
+     * 같은 패턴(생년월일 등)을 쓰기 쉽고, 바꿨는지 추적할 수도 없다.
+     * 담당자가 구두·서면으로 전달해야 하므로 불러줄 수 있는 형태로 만든다.
+     *
+     * <p>Keycloak의 {@code temporary=true}는 쓰지 않는다. UPDATE_PASSWORD 필수 조치가
+     * 걸리면 password grant 로그인이 "Account is not fully set up"으로 실패하는데,
+     * 직접 승인 방식에는 그 조치를 처리할 화면이 없다. 대신
+     * {@code passwordResetRequired} 플래그로 서비스가 변경을 유도한다.
      */
     @Transactional
-    public AuthDtos.ProfileResponse createProxyUser(UUID callerId, AuthDtos.ProxyUserRequest request) {
+    public AuthDtos.ProxyUserResponse createProxyUser(UUID callerId, AuthDtos.ProxyUserRequest request) {
         UserProfile caller = profileRepository.findById(callerId)
                 .orElseThrow(() -> new NotFoundException("프로필", callerId));
         // 기관 소속만 대리 생성할 수 있다. 개인 계정이 남의 신원을 만들 수 있으면 안 된다.
@@ -184,11 +196,14 @@ public class AuthService {
             throw new DuplicateResourceException("계정", email);
         }
 
-        UUID userId = keycloak.createUserWithoutCredentials(email, request.displayName());
+        String initialPassword = secretGenerator.generate();
+        UUID userId = keycloak.createUser(email, initialPassword, request.displayName());
         try {
             // organization은 비운다 — 대상자는 담당자가 아니므로 담당자 명단에 올리지 않는다.
-            return AuthDtos.ProfileResponse.from(profileRepository.save(new UserProfile(
-                    userId, email, request.displayName(), request.phone(), null)));
+            UserProfile profile = profileRepository.save(new UserProfile(
+                    userId, email, request.displayName(), request.phone(), null, true));
+            return new AuthDtos.ProxyUserResponse(
+                    AuthDtos.ProfileResponse.from(profile), initialPassword);
         } catch (RuntimeException e) {
             log.warn("프로필 저장 실패로 Keycloak 계정을 보상 삭제합니다: {}", userId);
             keycloak.deleteUser(userId);

@@ -56,22 +56,6 @@ public class KeycloakAdminClient {
 
     /** 사용자 생성 후 Keycloak user id 반환. 이메일이 이미 있으면 409. */
     public UUID createUser(String email, String password, String displayName) {
-        return createUser(email, password, displayName, true);
-    }
-
-    /**
-     * 비밀번호 없이 신원만 만든다 — 담당자가 대상자 계정을 대신 만들 때 쓴다.
-     *
-     * <p>자격증명이 없으므로 로그인은 불가능하지만 UUID는 즉시 생긴다.
-     * 알림 수신자 식별({@code notifications.auth_sub})에는 이 UUID만 있으면 되고,
-     * 실제 푸시 발송은 대상자가 직접 구독할 때 열린다.
-     * 비밀번호를 대신 정해 주면 그 값을 누가 보관할지가 문제가 되므로 만들지 않는다.
-     */
-    public UUID createUserWithoutCredentials(String email, String displayName) {
-        return createUser(email, null, displayName, false);
-    }
-
-    private UUID createUser(String email, String password, String displayName, boolean withPassword) {
         String adminToken = serviceAccountToken();
         Map<String, Object> body = new LinkedHashMap<>(Map.of(
                 "username", email,
@@ -83,12 +67,12 @@ public class KeycloakAdminClient {
                 "lastName", "-",
                 "enabled", true,
                 "emailVerified", false));
-        if (withPassword) {
-            body.put("credentials", List.of(Map.of(
-                    "type", GRANT_PASSWORD,
-                    "value", password,
-                    "temporary", false)));
-        }
+        // temporary=true는 쓰지 않는다 — UPDATE_PASSWORD 필수 조치가 걸리면
+        // password grant 로그인이 "Account is not fully set up"으로 실패한다.
+        body.put("credentials", List.of(Map.of(
+                "type", GRANT_PASSWORD,
+                "value", password,
+                "temporary", false)));
         URI location = http.post()
                 .uri("/admin/realms/{realm}/users", realm)
                 .header("Authorization", "Bearer " + adminToken)
