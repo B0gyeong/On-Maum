@@ -23,6 +23,10 @@
         const chk = document.createElement('input');
         chk.type = 'checkbox';
         chk.id = `chk_${house}`;
+        // 네이티브 체크박스를 집 아이콘으로 대체한다(.house-run-toggle). 값 자체는 checked 그대로다.
+        chk.className = 'house-run-toggle';
+        chk.title = `${house} 실행 여부`;
+        chk.setAttribute('aria-label', `${house} 실행`);
         chk.checked = (house === 'H001');
         tdChk.appendChild(chk);
         tr.appendChild(tdChk);

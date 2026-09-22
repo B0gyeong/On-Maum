@@ -5,6 +5,10 @@ let powerflowGeneration = 0;
 let powerflowTimers = [];
 let powerflowRunId = null;
 let powerflowHouse = null;
+// 발행량 요약용 집계. 패널의 주 상태(data-visual-state)는 여전히 이 숫자와 무관하게 결정된다.
+let powerflowPublished = 0;
+let powerflowPublishTimes = [];
+const POWERFLOW_RATE_WINDOW_MS = 3000;
 
 function powerflowElement(id) {
   return document.getElementById(id);
@@ -46,11 +50,50 @@ function powerflowReducedMotion() {
   return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
 
+function powerflowRenderThroughput() {
+  const total = powerflowElement('powerflowTotalCount');
+  if (total) total.textContent = powerflowPublished.toLocaleString();
+  const rate = powerflowElement('powerflowRate');
+  if (rate) rate.textContent = (powerflowPublishTimes.length / (POWERFLOW_RATE_WINDOW_MS / 1000)).toFixed(1);
+}
+
+// 발행이 멈추면 창이 비면서 속도가 자연스럽게 0으로 내려간다.
+function powerflowTrimPublishTimes(now) {
+  powerflowPublishTimes = powerflowPublishTimes.filter(time => now - time <= POWERFLOW_RATE_WINDOW_MS);
+}
+
+function powerflowCountPublish() {
+  const now = Date.now();
+  powerflowPublished += 1;
+  powerflowPublishTimes.push(now);
+  powerflowTrimPublishTimes(now);
+  powerflowRenderThroughput();
+}
+
+function powerflowResetThroughput() {
+  powerflowPublished = 0;
+  powerflowPublishTimes = [];
+  powerflowRenderThroughput();
+}
+
 function powerflowSetRing(percent) {
   const ring = powerflowElement('powerflowBurstRing');
   if (!ring) return;
   if (ring.style.setProperty) ring.style.setProperty('--burst-progress', percent);
   else ring.style['--burst-progress'] = percent;
+}
+
+function powerflowSetBurstGauge(published, planned) {
+  const pub = Math.max(0, Number(published) || 0);
+  const plan = Math.max(0, Number(planned) || 0);
+  const percent = plan > 0 ? Math.min(100, pub / plan * 100) : 0;
+  powerflowSetRing(`${percent}%`);
+  const gauge = powerflowElement('powerflowBurst');
+  if (gauge) gauge.setAttribute('aria-label', `MQTT 발행 ${pub}건 / 계획 ${plan}건`);
+  const count = powerflowElement('powerflowBurstCount');
+  if (count) count.textContent = `${pub.toLocaleString()}건 / ${plan.toLocaleString()}건`;
+  const ratio = powerflowElement('powerflowBurstPercent');
+  if (ratio) ratio.textContent = `${percent.toFixed(1)}%`;
 }
 
 function powerflowPulse() {
@@ -129,9 +172,8 @@ function powerflowReset() {
   panel.setAttribute('data-confirmed', '0');
   panel.setAttribute('data-visual-state', 'idle');
   panel.setAttribute('data-run-state', 'idle');
-  powerflowSetRing('0%');
-  const burst = powerflowElement('powerflowBurst');
-  if (burst) burst.setAttribute('aria-label', 'MQTT 발행 0건 / 계획 0건');
+  powerflowSetBurstGauge(0, 0);
+  powerflowResetThroughput();
   powerflowAnnounce('대기');
 }
 
@@ -148,9 +190,8 @@ function powerflowSetObservedHouse(house) {
   if (!panel) return;
   panel.setAttribute('data-confirmed', '0');
   panel.setAttribute('data-fault', '0');
-  powerflowSetRing('0%');
-  const gauge = powerflowElement('powerflowBurst');
-  if (gauge) gauge.setAttribute('aria-label', 'MQTT 발행 0건 / 계획 0건');
+  powerflowSetBurstGauge(0, 0);
+  powerflowResetThroughput();
   if (panel.getAttribute('data-run-state') === 'running') {
     panel.setAttribute('data-visual-state', 'waiting');
     powerflowAnnounce('발행 대기');
@@ -176,6 +217,8 @@ function powerflowApplyRealtime(metric) {
     (metric.source !== 'E2E' || metric.measurementAvailable === true) &&
     typeof metric.totalP === 'number' && Number.isFinite(metric.totalP);
   if (!published) {
+    powerflowTrimPublishTimes(Date.now());
+    powerflowRenderThroughput();
     powerflowClearMotion();
     panel.setAttribute('data-fault', missing ? '1' : '0');
     panel.setAttribute('data-confirmed', '0');
@@ -187,6 +230,7 @@ function powerflowApplyRealtime(metric) {
   panel.setAttribute('data-confirmed', '1');
   panel.setAttribute('data-visual-state', 'confirmed');
   powerflowAnnounce('MQTT 브로커 발행 확인');
+  powerflowCountPublish();
   powerflowPulse();
 }
 
@@ -207,10 +251,7 @@ function powerflowRenderE2E(snapshot) {
   if (!burst) return;
   const published = Math.max(0, Number(house && house.published_samples) || 0);
   const planned = Math.max(0, Number(house && house.planned_publish_samples) || 0);
-  const percent = planned > 0 ? Math.min(100, published / planned * 100) : 0;
-  powerflowSetRing(`${percent}%`);
-  const gauge = powerflowElement('powerflowBurst');
-  if (gauge) gauge.setAttribute('aria-label', `MQTT 발행 ${published}건 / 계획 ${planned}건`);
+  powerflowSetBurstGauge(published, planned);
   panel.setAttribute('data-confirmed', state === 'running' && published > 0 ? '1' : '0');
   if (state === 'running') {
     panel.setAttribute('data-visual-state', published > 0 ? 'confirmed' : 'waiting');

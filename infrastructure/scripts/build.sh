@@ -5,7 +5,7 @@ for service in api-gateway iot-device-service monitoring-service; do
   docker build -t "$IMAGE_REPOSITORY:$service-$RELEASE_ID" "backend/$service"
 done
 docker build --target test ai/realtime-analysis-service
-docker build -f ai/deployment/Dockerfile --target realtime-inference \
+docker build -f ai/deployment/Dockerfile --target configurable-inference \
   -t "$IMAGE_REPOSITORY:realtime-analysis-service-$RELEASE_ID" ai
 docker build --target test -f batch/aggregation_service/Dockerfile .
 docker build --target runtime -f batch/aggregation_service/Dockerfile \

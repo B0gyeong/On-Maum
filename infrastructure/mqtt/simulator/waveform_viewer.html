@@ -28,27 +28,38 @@
     data-fault="0" data-confirmed="0" aria-label="계측 데이터 전송 흐름: 대기. MQTT 브로커 발행 확인까지 표시">
     <div class="flow-title">계측 데이터 전송 흐름</div>
     <div class="flow-stage" aria-hidden="true">
-      <div id="powerflowBoard" class="flow-device flow-board">
-        <svg viewBox="0 0 72 72" focusable="false">
-          <rect x="13" y="9" width="46" height="54" />
-          <path d="M22 22h28M22 48h28M22 55h18" />
-          <path class="flow-wave" d="M22 36h7l4-7 6 14 4-7h7" />
-        </svg>
+      <div class="flow-node">
+        <div id="powerflowBoard" class="flow-device flow-board">
+          <svg viewBox="0 0 72 72" focusable="false">
+            <rect x="13" y="9" width="46" height="54" />
+            <path d="M22 22h28M22 48h28M22 55h18" />
+            <path class="flow-wave" d="M22 36h7l4-7 6 14 4-7h7" />
+          </svg>
+        </div>
+        <span class="flow-device-label">메인 분전반</span>
       </div>
       <div id="powerflowMqttLane" class="flow-lane flow-mqtt-lane">
         <span class="flow-track"></span>
         <span class="flow-lane-origin"></span>
         <span class="flow-lane-arrow"></span>
+        <span class="flow-lane-break" aria-hidden="true">결측</span>
         <span class="flow-lane-destination"></span>
       </div>
-      <div id="powerflowBroker" class="flow-device flow-broker">
-        <svg viewBox="0 0 72 72" focusable="false">
-          <rect x="13" y="16" width="46" height="40" />
-          <circle cx="27" cy="36" r="4" />
-          <circle cx="45" cy="36" r="4" />
-          <path d="M31 36h10" />
-        </svg>
+      <div class="flow-node">
+        <div id="powerflowBroker" class="flow-device flow-broker">
+          <svg viewBox="0 0 72 72" focusable="false">
+            <rect x="13" y="16" width="46" height="40" />
+            <circle cx="27" cy="36" r="4" />
+            <circle cx="45" cy="36" r="4" />
+            <path d="M31 36h10" />
+          </svg>
+        </div>
+        <span class="flow-device-label">MQTT 브로커</span>
       </div>
+    </div>
+    <div class="flow-throughput">
+      <span><span class="flow-metric-label">누적 발행</span><strong id="powerflowTotalCount">0</strong>건</span>
+      <span><span class="flow-metric-label">최근 발행 속도</span><strong id="powerflowRate">0.0</strong>건/s</span>
     </div>
     <div id="powerflowBurst" class="flow-burst" role="img" aria-label="MQTT 발행 0건 / 계획 0건">
       <div id="powerflowBurstRing" class="flow-burst-ring"><svg viewBox="0 0 72 72" focusable="false"
@@ -57,6 +68,10 @@
           <circle cx="29" cy="36" r="3" />
           <circle cx="43" cy="36" r="3" />
         </svg></div>
+      <div class="flow-burst-readout">
+        <span class="flow-burst-count" id="powerflowBurstCount">0건 / 0건</span>
+        <span class="flow-burst-percent" id="powerflowBurstPercent">0.0%</span>
+      </div>
     </div>
     <span id="powerflowA11yStatus" class="sr-only" role="status" aria-live="polite">대기. MQTT 브로커 발행 확인까지 표시</span>
   </section>
@@ -69,7 +84,7 @@
       <div>
         <div style="display: flex; align-items: center; gap: 10px;">
           <button type="button" id="e2eBtnTogglePanel" class="panel-toggle" aria-expanded="true"
-            aria-controls="e2ePanelBody" title="패널 접기/펼치기" onclick="togglePanel('e2ePanelBody')">▾</button>
+            aria-controls="e2ePanelBody" title="패널 접기/펼치기" onclick="togglePanel('e2ePanelBody')"></button>
           <span id="e2ePanelTitle" style="font-size: 1.15rem; font-weight: 700; color: #292524; cursor: pointer;"
             onclick="togglePanel('e2ePanelBody')">결정적 E2E 시나리오 실행 제어 패널</span>
           <span id="e2eOverallStatusBadge" class="badge-status status-normal">IDLE</span>
@@ -195,140 +210,140 @@
     </div>
   </div>
 
-  <!-- 1. 실시간 제어 바 -->
-  <div class="legacy-controls">
-    <div class="controls">
-      <button id="btnStartSimulation" class="btn btn-execute" onclick="startMultiSimulation()">
-        ▶ 설정한 가구 실행
-      </button>
-      <button id="btnPause" class="btn btn-secondary" onclick="togglePause()" disabled>
-        일시정지
-      </button>
-      <button id="btnReset" class="btn btn-secondary" onclick="resetSimulation()">
-        초기화
-      </button>
-      <div class="date-control-group" style="display: inline-flex; align-items: center; gap: 6px;">
-        <label for="simDateInput" style="font-size: 0.85rem; font-weight: 600; color: #78716c;">기준 날짜:</label>
-        <input type="date" id="simDateInput" class="speed-select" style="padding: 6px 10px;" />
-      </div>
-      <div class="fault-duration-group" style="display: inline-flex; align-items: center; gap: 6px;">
-        <label for="faultDurationInput" style="font-size: 0.85rem; font-weight: 600; color: #78716c;"
-          title="센서 고장 시나리오 결측 지속 시간(초, 1~3600)">결측 시간:</label>
-        <input type="number" id="faultDurationInput" class="speed-select" min="1" max="3600" step="1" value="120"
-          style="width: 76px; padding: 6px 8px; text-align: right;" placeholder="120" />
-        <span style="font-size: 0.8rem; color: #78716c;">초 (가상 시간 기준, 배속 적용)</span>
-      </div>
-      <div class="observe-control-group"
-        style="display: inline-flex; align-items: center; gap: 6px; background: rgba(243, 121, 41, 0.1); padding: 4px 10px; border-radius: 0; border: 1px solid rgba(243, 121, 41, 0.3);">
-        <label for="observedHouseSelect" style="font-size: 0.85rem; font-weight: 700; color: #b8490d;">관찰 가구:</label>
-        <select id="observedHouseSelect" class="speed-select" style="padding: 4px 8px; font-weight: bold;"
-          onchange="changeObservedHouse(this.value)">
-          <option value="H001">H001</option>
-          <option value="H002">H002</option>
-          <option value="H003">H003</option>
-          <option value="H004">H004</option>
-          <option value="H005">H005</option>
-          <option value="H006">H006</option>
-          <option value="H007">H007</option>
-          <option value="H008">H008</option>
-          <option value="H009">H009</option>
-          <option value="H010">H010</option>
-        </select>
-      </div>
-      <select id="speedSelect" class="speed-select" onchange="changeSpeed(this.value)">
-        <option value="1000">1x (실시간 1.0초)</option>
-        <option value="500">2x 배속 (0.5초)</option>
-        <option value="200">5x 배속 (0.2초)</option>
-        <option value="100">10x 배속 (0.1초)</option>
-      </select>
-    </div>
-  </div>
-
-  <!-- 발표용 원클릭 시연 제어 카드 -->
-  <div class="presentation-panel" id="presentationPanel">
-    <div>
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-        <span style="font-size: 1.05rem; font-weight: 700; color: #292524;"> 원클릭 시나리오</span>
-        <span class="badge-status status-running" style="font-size: 0.72rem; padding: 2px 8px;">H001 전용</span>
-      </div>
-      <div style="font-size: 0.82rem; color: #78716c;">
-        버튼 클릭 시 초기화 ➔ H001 가구 설정 ➔ 시나리오 할당 ➔ MQTT 데이터 발행이 즉시 자동 진행됩니다.
-      </div>
-    </div>
-    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-      <button id="btnDemoNormalRoutine" class="presentation-btn-normal" onclick="startNormalRoutineDemo()">
-        ▶ H001 정상 일상
-      </button>
-      <button id="btnDemoRoutineMissed" class="presentation-btn-missed" onclick="startRoutineMissedDemo()">
-        ▶ H001 이상 감지
-      </button>
-      <button id="btnDemoSensorFault" class="presentation-btn-fault" onclick="startSensorFaultDemo()">
-        ▶ H001 센서 고장
-      </button>
-    </div>
-  </div>
-
-  <!-- 시연 진행 안내 배너 -->
-  <div id="timelineNotice" class="timeline-notice">
-    [준비 완료] H001 정상 일상 또는 H001 이상 감지 버튼을 선택하세요.
-  </div>
-
-  <!-- 고급 설정 (다중 가구 시뮬레이션 설정 H001 ~ H010 접기/펼치기) -->
-  <details class="advanced-config-details" id="advancedConfigDetails" style="margin-bottom: 20px;">
-    <summary style="font-size: 0.88rem; margin-bottom: 8px;">고급 설정 및 개발 도구 (다중 가구 설정 접기/펼치기)</summary>
-    <div class="chart-container" id="householdConfigCard" style="padding: 16px 20px; margin-bottom: 0;">
-      <div
-        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
-        <div>
-          <div class="chart-title" style="display: flex; align-items: center; gap: 8px;">
-            <span>가구별 시나리오 설정</span>
-            <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">(H001 ~ H010)</span>
-          </div>
-          <div class="chart-desc">각 가구의 실행 여부와 시나리오를 선택하세요. 상단의 [▶ 설정한 가구 실행] 버튼으로 동시 시작됩니다.</div>
-        </div>
-        <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
-          <span style="font-size: 0.8rem; color: #78716c; margin-right: 4px; font-weight: 600;">프리셋:</span>
-          <button type="button" id="btnPresetPeak" class="btn btn-secondary"
-            style="font-size: 0.75rem; padding: 4px 8px;" onclick="applyPreset('peak_single')">H001 피크 단독</button>
-          <button type="button" id="btnPresetMissed" class="btn btn-secondary"
-            style="font-size: 0.75rem; padding: 4px 8px;" onclick="applyPreset('missed_single')">H001 루틴누락 단독</button>
-          <button type="button" id="btnPresetFault" class="btn btn-secondary"
-            style="font-size: 0.75rem; padding: 4px 8px;" onclick="applyPreset('fault_single')">H001 센서 고장</button>
-          <button type="button" id="btnPresetManual" class="btn btn-secondary"
-            style="font-size: 0.75rem; padding: 4px 8px;" onclick="applyPreset('manual_single')">H001 수동제어 단독</button>
-          <button type="button" id="btnPresetMulti" class="btn btn-secondary"
-            style="font-size: 0.75rem; padding: 4px 8px;" onclick="applyPreset('comprehensive')">종합 시연
-            (H001~H004)</button>
-          <button type="button" id="btnPresetAllRandom" class="btn btn-secondary"
-            style="font-size: 0.75rem; padding: 4px 8px;" onclick="applyPreset('all_random')">전체 랜덤 (10가구)</button>
-        </div>
-      </div>
-      <div style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 0;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.84rem;">
-          <thead>
-            <tr>
-              <th style="width: 60px; text-align: center;">실행</th>
-              <th style="width: 100px;">가구</th>
-              <th style="width: 200px;">시나리오</th>
-              <th style="width: 120px;">상태</th>
-              <th>최신 전력</th>
-            </tr>
-          </thead>
-          <tbody id="householdTableBody">
-            <!-- JS에서 H001 ~ H010 행 동적 생성 -->
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </details>
-
-  <!-- 2~6. 실시간 모니터링 영역 (통계 카드 ~ 이벤트 로그까지 단일 토글) -->
+  <!-- 1~6. 실시간 모니터링 영역 (제어 바 ~ 이벤트 로그까지 단일 토글) -->
   <div class="section-head">
     <button type="button" id="monitoringToggleBtn" class="panel-toggle" aria-expanded="true"
-      aria-controls="monitoringBody" title="접기/펼치기" onclick="togglePanel('monitoringBody')">▾</button>
-    <span class="section-head-title" onclick="togglePanel('monitoringBody')">실시간 모니터링 (통계 · 가전 상태 · 파형 · 이벤트 로그)</span>
+      aria-controls="monitoringBody" title="접기/펼치기" onclick="togglePanel('monitoringBody')"></button>
+    <span class="section-head-title" onclick="togglePanel('monitoringBody')">실시간 모니터링 (제어 · 원클릭 시나리오 · 통계 · 가전 상태 · 파형 · 이벤트 로그)</span>
   </div>
-  <div id="monitoringBody">
+  <div id="monitoringBody" class="section-body">
+
+    <!-- 1. 실시간 제어 바 -->
+    <div class="legacy-controls">
+      <div class="controls">
+        <button id="btnStartSimulation" class="btn btn-execute" onclick="startMultiSimulation()">
+          ▶ 설정한 가구 실행
+        </button>
+        <button id="btnPause" class="btn btn-secondary" onclick="togglePause()" disabled>
+          일시정지
+        </button>
+        <button id="btnReset" class="btn btn-secondary" onclick="resetSimulation()">
+          초기화
+        </button>
+        <div class="date-control-group" style="display: inline-flex; align-items: center; gap: 6px;">
+          <label for="simDateInput" style="font-size: 0.85rem; font-weight: 600; color: #78716c;">기준 날짜:</label>
+          <input type="date" id="simDateInput" class="speed-select" style="padding: 6px 10px;" />
+        </div>
+        <div class="fault-duration-group" style="display: inline-flex; align-items: center; gap: 6px;">
+          <label for="faultDurationInput" style="font-size: 0.85rem; font-weight: 600; color: #78716c;"
+            title="센서 고장 시나리오 결측 지속 시간(초, 1~3600)">결측 시간:</label>
+          <input type="number" id="faultDurationInput" class="speed-select" min="1" max="3600" step="1" value="120"
+            style="width: 76px; padding: 6px 8px; text-align: right;" placeholder="120" />
+          <span style="font-size: 0.8rem; color: #78716c;">초 (가상 시간 기준, 배속 적용)</span>
+        </div>
+        <div class="observe-control-group"
+          style="display: inline-flex; align-items: center; gap: 6px; background: rgba(243, 121, 41, 0.1); padding: 4px 10px; border-radius: 0; border: 1px solid rgba(243, 121, 41, 0.3);">
+          <label for="observedHouseSelect" style="font-size: 0.85rem; font-weight: 700; color: #b8490d;">관찰 가구:</label>
+          <select id="observedHouseSelect" class="speed-select" style="padding: 4px 8px; font-weight: bold;"
+            onchange="changeObservedHouse(this.value)">
+            <option value="H001">H001</option>
+            <option value="H002">H002</option>
+            <option value="H003">H003</option>
+            <option value="H004">H004</option>
+            <option value="H005">H005</option>
+            <option value="H006">H006</option>
+            <option value="H007">H007</option>
+            <option value="H008">H008</option>
+            <option value="H009">H009</option>
+            <option value="H010">H010</option>
+          </select>
+        </div>
+        <select id="speedSelect" class="speed-select" onchange="changeSpeed(this.value)">
+          <option value="1000">1x (실시간 1.0초)</option>
+          <option value="500">2x 배속 (0.5초)</option>
+          <option value="200">5x 배속 (0.2초)</option>
+          <option value="100">10x 배속 (0.1초)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 발표용 원클릭 시연 제어 카드 -->
+    <div class="presentation-panel" id="presentationPanel">
+      <div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+          <span style="font-size: 1.05rem; font-weight: 700; color: #292524;"> 원클릭 시나리오</span>
+          <span class="badge-status status-running" style="font-size: 0.72rem; padding: 2px 8px;">H001 전용</span>
+        </div>
+        <div style="font-size: 0.82rem; color: #78716c;">
+          버튼 클릭 시 초기화 ➔ H001 가구 설정 ➔ 시나리오 할당 ➔ MQTT 데이터 발행이 즉시 자동 진행됩니다.
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <button id="btnDemoNormalRoutine" class="presentation-btn-normal" onclick="startNormalRoutineDemo()">
+          ▶ H001 정상 일상
+        </button>
+        <button id="btnDemoRoutineMissed" class="presentation-btn-missed" onclick="startRoutineMissedDemo()">
+          ▶ H001 이상 감지
+        </button>
+        <button id="btnDemoSensorFault" class="presentation-btn-fault" onclick="startSensorFaultDemo()">
+          ▶ H001 센서 고장
+        </button>
+      </div>
+    </div>
+
+    <!-- 시연 진행 안내 배너 -->
+    <div id="timelineNotice" class="timeline-notice">
+      [준비 완료] H001 정상 일상 또는 H001 이상 감지 버튼을 선택하세요.
+    </div>
+
+    <!-- 고급 설정 (다중 가구 시뮬레이션 설정 H001 ~ H010 접기/펼치기) -->
+    <details class="advanced-config-details" id="advancedConfigDetails" style="margin-bottom: 20px;">
+      <summary style="font-size: 0.88rem; margin-bottom: 8px;">고급 설정 및 개발 도구 (다중 가구 설정 접기/펼치기)</summary>
+      <div class="chart-container" id="householdConfigCard" style="padding: 16px 20px; margin-bottom: 0;">
+        <div
+          style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <div class="chart-title" style="display: flex; align-items: center; gap: 8px;">
+              <span>가구별 시나리오 설정</span>
+              <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">(H001 ~ H010)</span>
+            </div>
+            <div class="chart-desc">각 가구의 실행 여부와 시나리오를 선택하세요. 상단의 [▶ 설정한 가구 실행] 버튼으로 동시 시작됩니다.</div>
+          </div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+            <span style="font-size: 0.8rem; color: #78716c; margin-right: 4px; font-weight: 600;">프리셋:</span>
+            <button type="button" id="btnPresetPeak" class="btn btn-secondary"
+              style="font-size: 0.75rem; padding: 4px 8px;" onclick="applyPreset('peak_single')">H001 피크 단독</button>
+            <button type="button" id="btnPresetMissed" class="btn btn-secondary"
+              style="font-size: 0.75rem; padding: 4px 8px;" onclick="applyPreset('missed_single')">H001 루틴누락 단독</button>
+            <button type="button" id="btnPresetFault" class="btn btn-secondary"
+              style="font-size: 0.75rem; padding: 4px 8px;" onclick="applyPreset('fault_single')">H001 센서 고장</button>
+            <button type="button" id="btnPresetManual" class="btn btn-secondary"
+              style="font-size: 0.75rem; padding: 4px 8px;" onclick="applyPreset('manual_single')">H001 수동제어 단독</button>
+            <button type="button" id="btnPresetMulti" class="btn btn-secondary"
+              style="font-size: 0.75rem; padding: 4px 8px;" onclick="applyPreset('comprehensive')">종합 시연
+              (H001~H004)</button>
+            <button type="button" id="btnPresetAllRandom" class="btn btn-secondary"
+              style="font-size: 0.75rem; padding: 4px 8px;" onclick="applyPreset('all_random')">전체 랜덤 (10가구)</button>
+          </div>
+        </div>
+        <div style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 0;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.84rem;">
+            <thead>
+              <tr>
+                <th style="width: 60px; text-align: center;">실행</th>
+                <th style="width: 100px;">가구</th>
+                <th style="width: 200px;">시나리오</th>
+                <th style="width: 120px;">상태</th>
+                <th>최신 전력</th>
+              </tr>
+            </thead>
+            <tbody id="householdTableBody">
+              <!-- JS에서 H001 ~ H010 행 동적 생성 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </details>
 
 
 

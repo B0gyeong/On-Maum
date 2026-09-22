@@ -124,6 +124,42 @@ module.exports = async function testPowerflowUI({ getGlobal, setGlobal, getOrCre
   assert.strictEqual(lane.children.length, 0, '모션 최소화 시 점 이동을 만들지 않는다');
   assert.ok(css.includes('@media (prefers-reduced-motion: reduce)'));
   sandbox.matchMedia = undefined;
+
+  console.log('\n[Test 51] 발행량 요약은 상태 판정을 바꾸지 않고 수치만 더한다');
+  const totalCount = getOrCreateElement('powerflowTotalCount');
+  const rateText = getOrCreateElement('powerflowRate');
+  const burstCount = getOrCreateElement('powerflowBurstCount');
+  const burstPercent = getOrCreateElement('powerflowBurstPercent');
   flow('powerflowReset')();
-  console.log('✔ Test 46-50 통과: 발행 확인 범위, 상태별 정지, 링 진행, 실행 격리, 모션 최소화');
+  assert.strictEqual(totalCount.textContent, '0');
+  assert.strictEqual(rateText.textContent, '0.0');
+  assert.strictEqual(burstCount.textContent, '0건 / 0건');
+  assert.strictEqual(burstPercent.textContent, '0.0%');
+  flow('powerflowBeginRun')(null);
+  flow('powerflowSetObservedHouse')('H001');
+  flow('powerflowApplyRealtime')({ ...metric, sec: 1 });
+  flow('powerflowApplyRealtime')({ ...metric, sec: 2 });
+  assert.strictEqual(totalCount.textContent, '2', '발행 확인된 샘플만 누적한다');
+  flow('powerflowApplyRealtime')({ ...metric, sec: 3, measurementAvailable: false, totalP: null });
+  assert.strictEqual(totalCount.textContent, '2', '결측은 누적에 들어가지 않는다');
+  assert.strictEqual(panel.getAttribute('data-visual-state'), 'missing',
+    '수치가 붙어도 상태 판정은 data-visual-state가 단독으로 한다');
+  flow('powerflowSetObservedHouse')('H002');
+  assert.strictEqual(totalCount.textContent, '0', '관찰 가구를 바꾸면 집계를 새로 센다');
+  setGlobal('observedHouse', 'H002');
+  flow('powerflowRenderE2E')(burst('burst-3', 25, 200));
+  assert.strictEqual(burstCount.textContent, '25건 / 200건', 'BURST 링 옆에 실제 건수를 적는다');
+  assert.strictEqual(burstPercent.textContent, '12.5%');
+  assert.strictEqual(gauge.getAttribute('aria-label'), 'MQTT 발행 25건 / 계획 200건');
+  assert.ok(htmlContent.includes('메인 분전반') && htmlContent.includes('MQTT 브로커'),
+    '좌우 기기 아이콘에는 이름표가 붙어 있어야 한다');
+  assert.ok(css.includes('content: "✓ 발행 확인"'), '상태 표식은 글리프와 문구를 함께 보여준다');
+  assert.ok(htmlContent.includes('class="flow-lane-break"'), '결측 구간 라벨은 레인 안에 있어야 한다');
+  assert.ok(css.includes('.flow-panel[data-visual-state="missing"] .flow-lane-break { display: inline-flex; }'),
+    '결측 라벨은 missing 상태에서만 드러난다');
+  assert.ok(css.includes('.flow-panel[data-visual-state="missing"] .flow-lane-arrow { display: none; }'),
+    '결측일 때는 흐름 화살표를 지워 끊긴 경로로 보여준다');
+
+  flow('powerflowReset')();
+  console.log('✔ Test 46-51 통과: 발행 확인 범위, 상태별 정지, 링 진행, 실행 격리, 모션 최소화, 발행량 요약');
 };

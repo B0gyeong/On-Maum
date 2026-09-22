@@ -130,6 +130,23 @@ class TestE2EApi(unittest.TestCase):
             urllib.request.urlopen(base + "/assets/unknown.js")
         self.assertEqual(unknown.exception.code, 404)
 
+    def test_css_referenced_images_are_served(self):
+        """CSS가 url()로 참조하는 이미지도 HTTP로 제공되는지 확인한다.
+
+        href/src 스캔으로는 잡히지 않아 정적 파일 허용 목록에서 누락되기 쉬운 경로다.
+        """
+        base = f"http://127.0.0.1:{self.port}"
+        with urllib.request.urlopen(base + "/assets/waveform.css") as response:
+            css = response.read().decode("utf-8")
+        image_urls = sorted(set(re.findall(r"url\('([A-Za-z0-9_./]+)'\)", css)))
+        self.assertTrue(image_urls, "CSS에서 url() 참조를 찾지 못했다")
+        for image_url in image_urls:
+            with self.subTest(image=image_url):
+                with urllib.request.urlopen(base + "/assets/" + image_url) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertTrue(response.read())
+                    self.assertIn("image/", response.headers["Content-Type"])
+
     def test_accelerated_speed_omitted_resolves_to_safe_auto_speed(self):
         """POST /api/e2e/runs: ACCELERATED에서 speed 생략 시 가구 수 기반 안전 배속 자동 산출"""
         # 1. 순수 함수 계약: 합계가 항상 DEFAULT_SAFE_AGGREGATE_RATE로 유지된다

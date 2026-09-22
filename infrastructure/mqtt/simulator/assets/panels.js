@@ -18,9 +18,9 @@
       const body = document.getElementById(bodyId);
       if (body) body.style.display = collapsed ? 'none' : '';
 
+      // 버튼 아이콘(빈 번개/채운 번개)은 CSS가 aria-expanded를 보고 교체한다.
       const toggle = document.getElementById(panel.toggleId);
       if (toggle) {
-        toggle.textContent = collapsed ? '\u25B8' : '\u25BE';
         toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       }
     }

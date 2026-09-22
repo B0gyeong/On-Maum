@@ -1,12 +1,14 @@
 # 인프라 담당자용 실제 모델 이미지
 
-실시간 분석 서버는 `realtime-inference`, 선택 장면 검수 worker는 `inference` target을
-사용한다. 두 target 모두 동일한 실제 체크포인트와 검증된 모델 코드를 포함한다.
+기본 배포는 `configurable-inference` target을 사용해 같은 이미지에서 `fake`, `real`,
+`selected_scene`을 환경변수로 전환한다. fail-closed 검증이 필요한 배포에는
+`realtime-inference` 또는 `inference` target을 별도로 사용할 수 있다.
 
 저장소 루트에서:
 
 ```sh
 docker build -f ai/deployment/Dockerfile --target realtime-inference -t nilm-realtime-inference:REV ai
+docker build -f ai/deployment/Dockerfile --target configurable-inference -t nilm-configurable-inference:REV ai
 docker build -f ai/deployment/Dockerfile --target inference -t nilm-scene-inference:REV ai
 docker build -f ai/deployment/Dockerfile --target fixture-publisher -t nilm-scene-fixture:REV ai
 docker run --rm --entrypoint python nilm-realtime-inference:REV -m realtime_analysis.asset_check --asset-root /assets
@@ -14,14 +16,14 @@ docker run --rm --entrypoint python nilm-scene-inference:REV -m realtime_analysi
 docker run --rm nilm-scene-fixture:REV --help
 ```
 
-`realtime-inference`는 `MODEL_BACKEND=real`, 255행 창으로 기존 실시간 파이프라인에서
-6개 모델을 실행한다. Jenkins build와 EC2 Compose의 기본 분석 서비스가 이 target을
-사용한다. `inference`는 `MODEL_BACKEND=selected_scene` 전용이며 기존 검수 절차를 유지한다.
+`configurable-inference`는 Jenkins build와 EC2 Compose의 기본 분석 서비스가 사용한다.
+`MODEL_BACKEND`로 세 모드를 선택하며, `real`은 255행 창을 요구하고
+`selected_scene`은 대상 가구와 격리된 토픽·컨슈머 그룹 설정을 추가로 요구한다.
+`realtime-inference`는 `real`, `inference`는 `selected_scene`만 허용하는 전용 target이다.
 
-로컬 Compose는 `local-inference` target을 사용한다. 이 target만
-`infrastructure/local/.env`의 `ANALYSIS_MODEL_BACKEND` 값으로 `fake`, `real`,
-`selected_scene`을 전환할 수 있다. 운영용 `realtime-inference`와 `inference` target의
-fail-closed 제한은 그대로 유지한다.
+로컬 Compose의 `local-inference`는 같은 configurable target의 호환 alias다.
+로컬과 EC2-B 모두 `ANALYSIS_MODEL_BACKEND` 값으로 모드를 전환할 수 있다.
+전용 `realtime-inference`와 `inference` target의 fail-closed 제한은 그대로 유지한다.
 
 추론 이미지는 체크포인트 6개·norm·잠긴 모델 코드를 포함한다. 별도 host asset mount가 필요 없다.
 발행 이미지는 raw panel만 포함한다. 두 이미지 모두 정답·기준 점수·외부 credential을 포함하지 않는다.

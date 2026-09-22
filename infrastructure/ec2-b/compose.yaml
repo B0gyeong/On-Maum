@@ -148,10 +148,11 @@ services:
       DATABASE_NAME: analysis_db
       DATABASE_USER: ${POSTGRES_USER:?POSTGRES_USER required}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
-      MODEL_WINDOW_SIZE: ${ANALYSIS_MODEL_WINDOW_SIZE:-299}
-      # real로 올리려면 MODEL_ASSET_ROOT와 가중치 볼륨, MODEL_WINDOW_SIZE=255가 함께 필요하다.
+      # configurable-inference 이미지는 fake/real/selected_scene을 런타임에 선택한다.
+      # real과 selected_scene 가중치는 이미지 안 /assets에 포함되어 있다.
+      MODEL_WINDOW_SIZE: ${ANALYSIS_MODEL_WINDOW_SIZE:-255}
       MODEL_BACKEND: ${ANALYSIS_MODEL_BACKEND:-fake}
-      MODEL_ASSET_ROOT: ${ANALYSIS_MODEL_ASSET_ROOT:-}
+      MODEL_ASSET_ROOT: ${ANALYSIS_MODEL_ASSET_ROOT:-/assets}
       MODEL_DEVICE: ${ANALYSIS_MODEL_DEVICE:-cpu}
       MODEL_DTYPE: ${ANALYSIS_MODEL_DTYPE:-float32}
       MODEL_THREADS: ${ANALYSIS_MODEL_THREADS:-1}

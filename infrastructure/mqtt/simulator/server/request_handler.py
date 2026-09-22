@@ -37,6 +37,12 @@ VIEWER_ASSETS = {
     "controls.js": "text/javascript; charset=utf-8",
     "events.js": "text/javascript; charset=utf-8",
     "e2e.js": "text/javascript; charset=utf-8",
+    # waveform.css가 url()로 참조하는 패널 토글 아이콘.
+    # HTML의 href/src가 아니라 CSS 안에서만 참조되므로 빠뜨리기 쉽다.
+    "image/empty_electricity.png": "image/png",
+    "image/full_electricity.png": "image/png",
+    "image/On_house.png": "image/png",
+    "image/Off_house.png": "image/png",
 }
 
 import simulator
