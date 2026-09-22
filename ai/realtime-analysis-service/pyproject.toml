@@ -43,7 +43,9 @@ realtime-fixture-replay = "realtime_analysis.fixture_publisher:main"
 where = ["src"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+# "."은 tests가 tools/ 패키지를 임포트하기 위한 것이다. pytest가 rootdir를 암묵적으로
+# 올려 주는 데 기대지 않고 명시한다.
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 markers = [
     "postgres: requires TEST_DATABASE_URL pointing at a disposable PostgreSQL database",

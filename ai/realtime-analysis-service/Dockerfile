@@ -25,6 +25,8 @@ FROM base AS test
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install $(python -c "import tomllib; print(*tomllib.load(open('pyproject.toml', 'rb'))['project']['optional-dependencies']['dev'])")
 COPY tests ./tests
+# 부하 테스트 도구는 운영 이미지에 필요 없다. 테스트가 임포트하므로 여기서만 싣는다.
+COPY tools ./tools
 RUN pytest
 
 FROM base AS inference
