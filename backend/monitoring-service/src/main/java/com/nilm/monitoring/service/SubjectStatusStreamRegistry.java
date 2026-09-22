@@ -78,9 +78,11 @@ public class SubjectStatusStreamRegistry {
             emitter.send(event);
         } catch (IOException | IllegalStateException e) {
             // 이미 끊긴 연결이다. 남은 담당자들에게는 계속 보내야 하므로 삼킨다.
+            // complete()는 부르지 않는다. 죽은 응답을 flush하려다 AsyncRequestNotUsableException이
+            // 나고, 그 예외가 요청 스레드로 디스패치되어 500 처리기까지 타게 된다.
+            // 전송에 실패한 emitter는 Spring이 이미 실패로 표시하고 onError 콜백을 부른다.
             log.debug("SSE 전송 실패로 연결을 정리합니다: managerId={}", managerId);
             remove(managerId, emitter);
-            emitter.complete();
         }
     }
 

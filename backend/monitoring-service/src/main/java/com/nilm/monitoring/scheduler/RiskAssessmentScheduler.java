@@ -37,7 +37,14 @@ public class RiskAssessmentScheduler {
     /** 평가 기준 시각의 출처. 테스트는 고정 시계를 넣어 유지시간·재발송 창 판정을 재현한다. */
     private final Clock clock;
 
-    @Scheduled(fixedDelayString = "${app.risk.scheduler-interval-ms:60000}")
+    /**
+     * 기동 직후 첫 실행은 잠시 미룰 수 있다. 초기 지연이 없으면 컨텍스트가 뜨는 순간 배경에서
+     * 한 바퀴 돌기 시작해, 스케줄러를 직접 부르는 테스트와 같은 표를 놓고 경쟁한다.
+     */
+    @Scheduled(
+            fixedDelayString = "${app.risk.scheduler-interval-ms:60000}",
+            initialDelayString = "${app.risk.scheduler-initial-delay-ms:0}"
+    )
     public void evaluateAll() {
         OffsetDateTime now = OffsetDateTime.now(clock);
 

@@ -16,7 +16,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  */
 @SpringBootTest(properties = {
         "app.risk.scheduler-enabled=true",
-        // 테스트가 도는 동안 배경에서 반복되지 않게 간격을 길게 둔다.
+        // 테스트가 도는 동안 배경에서 돌지 않게 첫 실행과 간격을 모두 길게 둔다.
+        // 초기 지연이 없으면 컨텍스트가 뜨는 순간 배경 실행이 시작되어, 다른 테스트가
+        // 공유 H2에 남긴 대상자까지 평가하며 이 테스트의 행 수 단정과 경쟁한다.
+        "app.risk.scheduler-initial-delay-ms=3600000",
         "app.risk.scheduler-interval-ms=3600000"
 })
 class RiskAssessmentSchedulerTest {

@@ -2,6 +2,7 @@ package com.nilm.monitoring.common;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import org.apache.catalina.connector.ClientAbortException;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,8 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.server.ResponseStatusException;
@@ -93,6 +96,22 @@ public class GlobalExceptionHandler {
                         request.getRequestURI(),
                         List.of()
                 ));
+    }
+
+    /**
+     * 클라이언트가 먼저 끊은 스트림(SSE 탭 닫힘, 프록시 타임아웃, 응답 도중 연결 종료).
+     * 받을 상대가 없으므로 본문을 쓰지 않고(void) 한 줄만 남긴다.
+     * 본문을 쓰려 하면 Content-Type이 text/event-stream으로 확정된 응답에
+     * JSON 변환기가 없다는 WARN이 한 번 더 찍힌다.
+     */
+    @ExceptionHandler({
+            AsyncRequestNotUsableException.class,
+            AsyncRequestTimeoutException.class,
+            ClientAbortException.class
+    })
+    public void handleClientGone(Exception e, HttpServletRequest request) {
+        log.debug("클라이언트가 먼저 끊은 요청: {} ({}: {})",
+                request.getRequestURI(), e.getClass().getSimpleName(), e.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
