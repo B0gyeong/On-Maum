@@ -110,6 +110,30 @@ public class DeviceService {
         return DeviceDtos.Response.from(device);
     }
 
+    /**
+     * MQTT 계정 비밀번호 로테이션 — username 유지, 해시만 교체.
+     * RETIRED 기기는 불가. 새 평문은 응답에서 1회만 노출되며,
+     * 브로커 반영은 별도의 passwd 동기화(/admin/mqtt/sync)로 수행한다.
+     */
+    @Transactional
+    public DeviceDtos.CredentialRotateResponse rotateCredential(Long deviceId, String changedBy) {
+        Device device = findDevice(deviceId);
+        if (device.getStatus() == DeviceStatus.RETIRED) {
+            throw new com.nilm.device.common.InvalidOperationException(
+                    "폐기된 기기의 계정은 로테이션할 수 없습니다: " + deviceId);
+        }
+        DeviceCredential credential = credentialRepository.findById(deviceId)
+                .orElseThrow(() -> new NotFoundException("MQTT 계정", deviceId));
+
+        String plainPassword = generatePassword();
+        credential.rotate(passwordEncoder.encode(plainPassword), mosquittoHasher.hash(plainPassword));
+        historyRepository.save(new InstallHistory(deviceId,
+                InstallHistory.EventType.CREDENTIAL_ROTATED, null, null, "비밀번호 로테이션", changedBy));
+
+        return new DeviceDtos.CredentialRotateResponse(
+                deviceId, credential.getMqttUsername(), plainPassword);
+    }
+
     public List<DeviceDtos.HistoryResponse> history(Long deviceId) {
         findDevice(deviceId); // 존재 검증
         return historyRepository.findByDeviceIdOrderByChangedAtDesc(deviceId).stream()

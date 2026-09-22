@@ -77,7 +77,14 @@ REBALANCE_EVENTS = ("assign", "revoke", "lost")
 class AnalysisMetrics:
     """Owns the bounded-cardinality metrics exposed by ``/metrics``."""
 
-    def __init__(self, registry: CollectorRegistry = REGISTRY) -> None:
+    def __init__(
+        self,
+        registry: CollectorRegistry = REGISTRY,
+        e2e_clock_skew_tolerance_seconds: float = 0.1,
+    ) -> None:
+        self.set_e2e_clock_skew_tolerance(
+            e2e_clock_skew_tolerance_seconds
+        )
         self.stage_duration = Histogram(
             "nilm_analysis_stage_duration_seconds",
             "Realtime analysis pipeline stage duration in seconds.",
@@ -207,11 +214,18 @@ class AnalysisMetrics:
     def observe_stage(self, stage: str, duration_ns: int) -> None:
         self.stage_duration.labels(stage=stage).observe(duration_ns / 1_000_000_000)
 
+    def set_e2e_clock_skew_tolerance(self, tolerance_seconds: float) -> None:
+        """Configure how much negative E2E time is treated as clock jitter."""
+
+        if tolerance_seconds < 0:
+            raise ValueError("E2E clock skew tolerance must be non-negative")
+        self._e2e_clock_skew_tolerance_seconds = tolerance_seconds
+
     def observe_e2e(self, duration_seconds: float) -> None:
-        if duration_seconds < 0:
+        if duration_seconds < -self._e2e_clock_skew_tolerance_seconds:
             self.record_error("e2e", "ClockSkew")
             return
-        self.e2e_duration.observe(duration_seconds)
+        self.e2e_duration.observe(max(duration_seconds, 0.0))
 
     def record_message(self, status: str) -> None:
         self.messages.labels(status=status).inc()

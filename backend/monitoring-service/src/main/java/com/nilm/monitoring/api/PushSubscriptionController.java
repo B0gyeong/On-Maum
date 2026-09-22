@@ -1,5 +1,6 @@
 package com.nilm.monitoring.api;
 
+import com.nilm.monitoring.dto.PushSubscriptionDeleteRequest;
 import com.nilm.monitoring.dto.PushSubscriptionRequest;
 import com.nilm.monitoring.service.PushSubscriptionService;
 import jakarta.validation.Valid;
@@ -8,10 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
@@ -26,11 +24,18 @@ public class PushSubscriptionController {
             @Valid @RequestBody PushSubscriptionRequest request
     ) {
         String authSub = jwt == null ? null : jwt.getSubject();
-        boolean registered = service.register(authSub, request);
+        service.register(authSub, request);
 
-        if (!registered) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping
+    public ResponseEntity<Void> unregister(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody PushSubscriptionDeleteRequest request
+    ) {
+        String authSub = jwt == null ? null : jwt.getSubject();
+        service.unregister(authSub, request.endpoint());
 
         return ResponseEntity.noContent().build();
     }

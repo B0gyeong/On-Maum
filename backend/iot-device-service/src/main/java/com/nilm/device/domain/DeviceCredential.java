@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 @Entity
 @Table(name = "device_credentials")
@@ -44,7 +45,14 @@ public class DeviceCredential {
     }
 
     public void revoke() {
-        this.revokedAt = OffsetDateTime.now();
+        this.revokedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
+    /** 비밀번호 로테이션 — 새 해시로 교체하고 rotated_at 기록. username은 유지. */
+    public void rotate(String newSecretHash, String newMosquittoHash) {
+        this.secretHash = newSecretHash;
+        this.mosquittoHash = newMosquittoHash;
+        this.rotatedAt = OffsetDateTime.now();
     }
 
     public Long getDeviceId() {

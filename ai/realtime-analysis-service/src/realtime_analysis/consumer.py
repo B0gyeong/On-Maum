@@ -45,6 +45,11 @@ class AnalysisConsumer:
         metrics: AnalysisMetrics = METRICS,
     ) -> None:
         self._input_topic = settings.kafka_input_topic
+        self._measurement_type = PowerMeasurement
+        self._scene_run_id = settings.analysis_run_id if settings.model_backend == "selected_scene" else None
+        if settings.model_backend == "selected_scene":
+            from realtime_analysis.scene_pipeline import SceneMeasurement
+            self._measurement_type = SceneMeasurement
         self._dlq_publisher = dlq_publisher
         self._handler = handler
         self._consumer = consumer or Consumer(settings.consumer_config())
@@ -103,7 +108,8 @@ class AnalysisConsumer:
             try:
                 with stage("deserialize_validate"):
                     payload = self._decode_json(message)
-                    measurement = PowerMeasurement.model_validate(payload)
+                    measurement = (self._measurement_type.model_validate_json(json.dumps(payload))
+                                   if self._scene_run_id is not None else self._measurement_type.model_validate(payload))
             except (UnicodeDecodeError, json.JSONDecodeError) as error:
                 raw_payload = (
                     message.value().decode("utf-8", errors="replace")
@@ -136,6 +142,10 @@ class AnalysisConsumer:
                 timer.mark("dlq")
                 return
 
+            if self._scene_run_id is not None and measurement.run_id != self._scene_run_id:
+                self._store_offset(message)
+                timer.mark("skipped_other_scene_run")
+                return
             timer.bind_measurement(measurement)
             topic = self._message_string(message, "topic")
             partition = self._message_int(message, "partition")

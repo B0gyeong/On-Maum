@@ -2,6 +2,7 @@ import json
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
+import pytest
 from prometheus_client import CollectorRegistry, generate_latest
 
 import realtime_analysis.pipeline_timing as pipeline_timing_module
@@ -172,9 +173,32 @@ def test_pipeline_timing_updates_histogram_and_throughput(monkeypatch) -> None:
     assert 'nilm_analysis_messages_total{status="processed"} 1.0' in output
 
 
-def test_negative_e2e_is_counted_as_clock_skew_instead_of_latency() -> None:
+def test_negative_e2e_within_tolerance_is_clamped_to_zero() -> None:
     registry = CollectorRegistry()
-    metrics = AnalysisMetrics(registry)
+    metrics = AnalysisMetrics(
+        registry,
+        e2e_clock_skew_tolerance_seconds=0.1,
+    )
+
+    metrics.observe_e2e(-0.05)
+
+    assert (
+        registry.get_sample_value("nilm_analysis_e2e_duration_seconds_count")
+        == 1
+    )
+    assert registry.get_sample_value("nilm_analysis_e2e_duration_seconds_sum") == 0
+    assert registry.get_sample_value(
+        "nilm_analysis_errors_total",
+        {"stage": "e2e", "error_type": "ClockSkew"},
+    ) is None
+
+
+def test_negative_e2e_exceeding_tolerance_is_counted_as_clock_skew() -> None:
+    registry = CollectorRegistry()
+    metrics = AnalysisMetrics(
+        registry,
+        e2e_clock_skew_tolerance_seconds=0.1,
+    )
 
     metrics.observe_e2e(-0.5)
 
@@ -183,3 +207,11 @@ def test_negative_e2e_is_counted_as_clock_skew_instead_of_latency() -> None:
         "nilm_analysis_errors_total",
         {"stage": "e2e", "error_type": "ClockSkew"},
     ) == 1
+
+
+def test_negative_e2e_tolerance_must_be_non_negative() -> None:
+    with pytest.raises(ValueError, match="must be non-negative"):
+        AnalysisMetrics(
+            CollectorRegistry(),
+            e2e_clock_skew_tolerance_seconds=-0.1,
+        )

@@ -52,6 +52,14 @@ public final class DeviceDtos {
     ) {
     }
 
+    /** 로테이션 응답 — 새 mqttPassword는 이 응답에서 1회만 노출된다. */
+    public record CredentialRotateResponse(
+            Long deviceId,
+            String mqttUsername,
+            String mqttPassword
+    ) {
+    }
+
     public record StatusChangeRequest(
             @NotNull
             DeviceStatus status,

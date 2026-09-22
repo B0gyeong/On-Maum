@@ -15,3 +15,10 @@ export const registerPushSubscription = (subscription: PushSubscriptionRequest) 
     method: "POST",
     data: subscription,
   });
+
+export const deletePushSubscription = (endpoint: string) =>
+  request<void>({
+    url: "/monitoring/push-subscriptions",
+    method: "DELETE",
+    data: { endpoint },
+  });

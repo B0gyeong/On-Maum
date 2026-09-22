@@ -14,22 +14,35 @@ public class PushSubscriptionService {
     private final PushSubscriptionRepository repository;
 
     @Transactional
-    public boolean register(
+    public void register( // 소유권 충돌로 0행이 되는 분기가 없어지므로 void로 반환형 변경
             String authSub,
             PushSubscriptionRequest request
     ) {
-        if (authSub == null || authSub.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
-        }
 
-        int affectedRows = repository.register(
+        requireAuthSub(authSub);
+
+        repository.register(
                 authSub,
                 request.endpoint(),
                 request.keys().p256dh(),
                 request.keys().auth()
         );
 
-        return affectedRows == 1;
+    }
+
+    @Transactional
+    public void unregister(String authSub, String endpoint) {
+        requireAuthSub(authSub);
+        repository.deleteOwnedSubscription(authSub, endpoint);
+    }
+
+    private void requireAuthSub(String authSub) {
+        if (authSub == null || authSub.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "로그인이 필요합니다."
+            );
+        }
     }
 
 }

@@ -60,6 +60,9 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     settings = get_settings()
+    METRICS.set_e2e_clock_skew_tolerance(
+        settings.analysis_e2e_clock_skew_tolerance_seconds
+    )
     logging.basicConfig(
         level=getattr(logging, settings.log_level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -73,6 +76,11 @@ def main() -> None:
 
     signal.signal(signal.SIGINT, request_shutdown)
     signal.signal(signal.SIGTERM, request_shutdown)
+
+    if settings.model_backend == "selected_scene":
+        from realtime_analysis.scene_pipeline import run_selected_scene
+        run_selected_scene(settings, stop_event)
+        return
 
     # 이상 탐지기 생성
     tracker = DailyActivityTracker()

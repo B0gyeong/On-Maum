@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 /**
@@ -85,6 +86,14 @@ public class Notification {
     @Column(name = "manager_status_updated_at")
     private OffsetDateTime managerStatusUpdatedAt;
 
+    /** 알림 행이 만들어진 시각. 발송 지연을 재는 기준점이다. */
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private OffsetDateTime createdAt;
+
+    /** 상태가 마지막으로 바뀐 시각. 상태 변경 메서드가 갱신한다. */
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
+
     protected Notification() {
     }
 
@@ -101,6 +110,10 @@ public class Notification {
         this.assessmentId = assessmentId;
         this.subjectId = subjectId;
         this.authSub = authSub;
+
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        this.createdAt = now;
+        this.updatedAt = now;
     }
 
     public void requestResponse(OffsetDateTime deadline) {
@@ -113,6 +126,7 @@ public class Notification {
 
         this.responseDeadline = deadline;
         this.responseStatus = ResponseStatus.PENDING;
+        touch(OffsetDateTime.now(ZoneOffset.UTC));
     }
 
     public void answer(boolean answer, OffsetDateTime now) {
@@ -126,12 +140,14 @@ public class Notification {
         this.userResponse = answer;
         this.respondedAt = now;
         this.responseStatus = ResponseStatus.ANSWERED;
+        touch(now);
     }
 
     public void expireIfOverdue(OffsetDateTime now) {
         if (responseStatus == ResponseStatus.PENDING
                 && !now.isBefore(responseDeadline)) {
             this.responseStatus = ResponseStatus.EXPIRED;
+            touch(now);
         }
     }
 
@@ -148,10 +164,12 @@ public class Notification {
 
         this.managerResponseStatus = status;
         this.managerStatusUpdatedAt = now;
+        touch(now);
     }
 
     public void markSent() {
         this.sendStatus = SendStatus.SENT;
+        touch(OffsetDateTime.now(ZoneOffset.UTC));
     }
 
     public void markFailed() {
@@ -159,5 +177,16 @@ public class Notification {
             throw new IllegalStateException("발송 완료된 알림입니다.");
         }
         this.sendStatus = SendStatus.FAILED;
+        touch(OffsetDateTime.now(ZoneOffset.UTC));
+    }
+
+    /** 상태 변경 시각을 기록한다. 시계가 뒤로 가도 갱신 시각은 뒤로 가지 않는다. */
+    private void touch(OffsetDateTime now) {
+        if (now == null) {
+            now = OffsetDateTime.now(ZoneOffset.UTC);
+        }
+        if (this.updatedAt == null || now.isAfter(this.updatedAt)) {
+            this.updatedAt = now;
+        }
     }
 }

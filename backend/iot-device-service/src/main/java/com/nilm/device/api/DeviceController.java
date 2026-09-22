@@ -56,6 +56,14 @@ public class DeviceController {
         return deviceService.changeStatus(deviceId, request);
     }
 
+    @Operation(summary = "MQTT 계정 비밀번호 로테이션",
+            description = "username 유지, 비밀번호만 재발급. 새 비밀번호는 이 응답에서 1회만 노출. "
+                    + "브로커 반영은 /api/devices/admin/mqtt/sync 호출 필요. RETIRED 기기는 400.")
+    @PostMapping("/{deviceId}/credentials/rotate")
+    public DeviceDtos.CredentialRotateResponse rotateCredential(@PathVariable Long deviceId) {
+        return deviceService.rotateCredential(deviceId, "system");
+    }
+
     @Operation(summary = "기기 이력 조회")
     @GetMapping("/{deviceId}/history")
     public List<DeviceDtos.HistoryResponse> history(@PathVariable Long deviceId) {

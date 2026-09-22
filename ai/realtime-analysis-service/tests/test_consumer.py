@@ -62,6 +62,24 @@ def test_valid_message_is_handled_before_offset_store() -> None:
     consumer.commit.assert_not_called()
 
 
+def test_selected_scene_preserves_metadata_and_skips_other_runs():
+    from realtime_analysis.scene_pipeline import SceneMeasurement
+    settings = Settings(_env_file=None, model_backend="selected_scene", model_asset_root="assets",
+        analysis_run_id="r3-run", kafka_input_topic="power.scene.v2", kafka_group_id="r3-run")
+    consumer, handler, dlq = Mock(), Mock(), Mock()
+    analysis = AnalysisConsumer(settings, dlq, handler, consumer)
+    data = {**payload(), "run_id": "old-run", "profile_id": "profile",
+            "source_index": 1, "valid": True, "context": True}
+    analysis.process_message(kafka_message(data))
+    handler.assert_not_called()
+    consumer.store_offsets.assert_called_once()
+    data["run_id"] = "r3-run"
+    analysis.process_message(kafka_message(data))
+    item = handler.call_args.args[0]
+    assert isinstance(item, SceneMeasurement) and item.source_index == 1
+    assert item.run_id == "r3-run"
+
+
 def test_invalid_message_goes_to_dlq_and_stores_offset() -> None:
     consumer = Mock()
     handler = Mock()

@@ -15,7 +15,7 @@ import java.time.OffsetDateTime;
 public class InstallHistory {
 
     public enum EventType {
-        INSTALLED, RELOCATED, STATUS_CHANGED, FIRMWARE_UPDATED, RETIRED
+        INSTALLED, RELOCATED, STATUS_CHANGED, FIRMWARE_UPDATED, RETIRED, CREDENTIAL_ROTATED
     }
 
     @Id

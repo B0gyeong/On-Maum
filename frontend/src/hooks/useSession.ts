@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { hasSession, SESSION_EVENT } from "../api/tokenStorage";
+import { getSessionRole, hasSession, SESSION_EVENT } from "../api/tokenStorage";
 
 function subscribe(callback: () => void) {
   window.addEventListener(SESSION_EVENT, callback);
@@ -12,4 +12,8 @@ function subscribe(callback: () => void) {
 
 export function useSession() {
   return useSyncExternalStore(subscribe, hasSession, () => false);
+}
+
+export function useSessionRole() {
+  return useSyncExternalStore(subscribe, getSessionRole, () => null);
 }

@@ -9,6 +9,7 @@ import com.nilm.device.domain.HouseholdMember;
 import com.nilm.device.repository.HouseholdInviteRepository;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -44,7 +45,7 @@ public class InviteService {
         int hours = request.expiresInHours() == null ? DEFAULT_EXPIRY_HOURS : request.expiresInHours();
         HouseholdInvite invite = inviteRepository.save(new HouseholdInvite(
                 generateCode(), houseId, request.relation(), caller,
-                OffsetDateTime.now().plusHours(hours)));
+                OffsetDateTime.now(ZoneOffset.UTC).plusHours(hours)));
         return InviteDtos.Response.from(invite);
     }
 
@@ -64,7 +65,7 @@ public class InviteService {
         HouseholdInvite invite = inviteRepository.findById(code.toUpperCase())
                 .orElseThrow(() -> new NotFoundException("초대 코드", code));
 
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         String unusable = invite.unusableReason(now);
         if (unusable != null) {
             throw new InvalidOperationException(unusable);
@@ -86,7 +87,7 @@ public class InviteService {
         if (invite.getUsedAt() != null) {
             throw new InvalidOperationException("이미 사용된 코드는 회수할 수 없습니다");
         }
-        invite.revoke(OffsetDateTime.now());
+        invite.revoke(OffsetDateTime.now(ZoneOffset.UTC));
         return InviteDtos.Response.from(invite);
     }
 

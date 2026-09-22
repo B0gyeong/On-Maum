@@ -1,10 +1,16 @@
 from realtime_analysis.database import Base
 from realtime_analysis import models  # noqa: F401
+from realtime_analysis import scene_pipeline  # noqa: F401
+from realtime_analysis import scene_events  # noqa: F401
 
 
 def test_analysis_schema_contains_expected_tables() -> None:
     assert set(Base.metadata.tables) == {
         "model_artifact",
+        "selected_scene_evidence",
+        "selected_scene_projection",
+        "selected_scene_usage",
+        "selected_scene_outbox",
         "routine_baseline",
         "analysis_policy",
         "analysis_event_emission",

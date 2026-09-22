@@ -11,7 +11,9 @@ import com.nilm.monitoring.scheduler.RiskAssessmentScheduler;
 import com.nilm.monitoring.service.HouseholdProfileService;
 import com.nilm.monitoring.service.RiskAssessmentService;
 import com.nilm.monitoring.service.RiskAssessmentService.EvaluationTarget;
+import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,7 +51,10 @@ class RiskAssessmentIsolationTest {
 
     @BeforeEach
     void setup() {
-        scheduler = new RiskAssessmentScheduler(assessments);
+        // 이벤트 등급을 심은 시각(NOW)에 시계를 고정한다. 실제 시각을 쓰면 유지시간 6시간이
+        // 지난 뒤 실행될 때 등급이 만료되어 결과가 실행 시점에 따라 갈린다.
+        scheduler = new RiskAssessmentScheduler(
+                assessments, Clock.fixed(NOW.toInstant(), ZoneOffset.UTC));
 
         jdbc.update("delete from notifications");
         jdbc.update("delete from risk_assessments");

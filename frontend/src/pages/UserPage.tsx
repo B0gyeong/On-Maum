@@ -1,15 +1,13 @@
 import { useState } from "react";
-import "../styles/user.css";
 import { useNavigate } from "react-router-dom";
 import { getApiErrorMessage } from "../api/client";
 import { clearSession } from "../api/tokenStorage";
-import AwaySettings from "../components/user/AwaySettings";
 import type { AwayDraft } from "../components/user/AwaySettings";
-import NotificationPrompt from "../components/user/NotificationPrompt";
-import PushNotificationCard from "../components/user/PushNotificationCard";
-import UserDashboard from "../components/user/UserDashboard";
+import UserAwayTab from "../components/user/UserAwayTab";
 import UserHeader from "../components/user/UserHeader";
+import UserHomeTab from "../components/user/UserHomeTab";
 import UserNavigation from "../components/user/UserNavigation";
+import type { UserTabStatusProps } from "../components/user/UserTabStatus";
 import type { UserTab } from "../components/user/UserNavigation";
 import {
   useAwayModeMutation,
@@ -26,7 +24,7 @@ export default function UserPage({ comparison = false }: { comparison?: boolean 
   const responseMutation = useNotificationResponseMutation();
   const [feedback, setFeedback] = useState("");
   const [tab, setTab] = useState<UserTab>("home");
-  const [awayDraft, setAwayDraft] = useState<AwayDraft>({ duration: 60, start: "" });
+  const [awayDraft, setAwayDraft] = useState<AwayDraft>({ duration: 60 });
   const { notificationId, clearNotification } = usePendingNotification();
   const pushSubscription = usePushSubscription();
   const data = dashboard.data;
@@ -40,20 +38,12 @@ export default function UserPage({ comparison = false }: { comparison?: boolean 
       setFeedback("외출 시간을 1~1440분 사이로 입력해 주세요.");
       return;
     }
-    const startsAt = enabled && awayDraft.start ? new Date(awayDraft.start) : new Date();
-    if (enabled && awayDraft.start && startsAt.getTime() <= Date.now()) {
-      setFeedback("예약 시작 시간은 현재보다 이후로 선택해 주세요.");
-      return;
-    }
     try {
       await awayMutation.mutateAsync(
         enabled
           ? {
               enabled,
-              ...(awayDraft.start ? { startsAt: startsAt.toISOString() } : {}),
-              endsAt: new Date(
-                startsAt.getTime() + awayDraft.duration * 60_000,
-              ).toISOString(),
+              endsAt: new Date(Date.now() + awayDraft.duration * 60_000).toISOString(),
             }
           : { enabled },
       );
@@ -75,71 +65,50 @@ export default function UserPage({ comparison = false }: { comparison?: boolean 
     }
   };
 
-  const logout = () => {
-    pushSubscription.unsubscribe().catch(() => undefined);
+  const logout = async () => {
+    await Promise.allSettled([pushSubscription.unsubscribe()]);
     clearSession();
     navigate("/");
   };
 
+  const tabStatus: UserTabStatusProps = {
+    dashboardError: dashboard.isError ? getApiErrorMessage(dashboard.error) : "",
+    notificationPending: Boolean(notificationId),
+    busy,
+    dataAvailable: Boolean(data),
+    pushStatus: pushSubscription.status,
+    pushError: pushSubscription.error,
+    feedback,
+    onRetryDashboard: () => void dashboard.refetch(),
+    onAnswerNotification: (value) => void answer(value),
+    onEnablePush: () => void pushSubscription.enable(),
+    onRetryPush: () => void pushSubscription.retry(),
+    onClearFeedback: () => setFeedback(""),
+  };
+
   return (
     <main
-      className={`user-interface min-h-screen pb-28 ${comparison ? "selection:bg-brand-200" : ""}`}
+      className={`min-h-screen bg-stone-50 pb-[calc(7rem+env(safe-area-inset-bottom))] text-xl leading-[1.6] text-stone-800 [overflow-wrap:anywhere] ${comparison ? "selection:bg-brand-200" : ""}`}
     >
       <UserHeader onLogout={logout} />
       <div className="mx-auto grid max-w-xl gap-5 px-5">
-        <div>
-          <h1 className="text-3xl leading-snug font-bold">
-            {tab === "away"
-              ? "외출 시간 정하기"
-              : data
-                ? `${data.name}님, 안녕하세요.`
-                : "안녕하세요."}
-          </h1>
-          {comparison && (
-            <p className="mt-2 text-sm font-semibold text-brand-700">기존 디자인 비교 화면</p>
-          )}
-        </div>
-        {dashboard.isError && (
-          <div className="rounded-xl bg-red-50 p-4 text-red-700" role="alert">
-            <p>{getApiErrorMessage(dashboard.error)}</p>
-            <button className="mt-2 font-bold underline" onClick={() => void dashboard.refetch()}>
-              다시 불러오기
-            </button>
-          </div>
-        )}
-        {notificationId && (
-          <NotificationPrompt disabled={busy || !data} onAnswer={(value) => void answer(value)} />
-        )}
-        <PushNotificationCard
-          status={pushSubscription.status}
-          error={pushSubscription.error}
-          onEnable={() => void pushSubscription.enable()}
-          onRetry={() => void pushSubscription.retry()}
-        />
-        {feedback && (
-          <div
-            className="flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 p-4"
-            role="status"
-          >
-            <p className="flex-1 text-brand-900">{feedback}</p>
-            <button className="user-quiet-action" onClick={() => setFeedback("")}>
-              확인하기
-            </button>
-          </div>
-        )}
         {tab === "home" ? (
-          <UserDashboard
+          <UserHomeTab
             data={data}
+            comparison={comparison}
             busy={busy}
+            status={tabStatus}
             onUpdateAway={(enabled) => void updateAway(enabled)}
             onOpenAwaySettings={() => setTab("away")}
           />
         ) : (
-          <AwaySettings
+          <UserAwayTab
             draft={awayDraft}
             mode={data?.awayMode}
             busy={busy}
             dataAvailable={Boolean(data)}
+            comparison={comparison}
+            status={tabStatus}
             onDraftChange={setAwayDraft}
             onUpdateAway={(enabled) => void updateAway(enabled)}
           />

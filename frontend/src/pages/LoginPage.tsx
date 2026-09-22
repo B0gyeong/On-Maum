@@ -1,5 +1,4 @@
 import { useState } from "react";
-import "../styles/user.css";
 import type { FormEvent } from "react";
 import { login } from "../api/auth";
 import { getApiErrorMessage } from "../api/client";
@@ -16,13 +15,13 @@ export default function LoginPage({ role }: { role: "staff" | "user" }) {
     setError("");
     const keepSignedIn = form.get("keepSignedIn") === "true";
     login(String(form.get("email")).trim(), String(form.get("password")))
-      .then((tokens) => saveSession(tokens, keepSignedIn))
+      .then((tokens) => saveSession(tokens, keepSignedIn, role))
       .catch((cause: unknown) => setError(getApiErrorMessage(cause)))
       .finally(() => setBusy(false));
   };
   return (
     <main
-      className={`grid min-h-screen place-items-center p-5 ${role === "user" ? "user-interface user-login" : "bg-stone-100"}`}
+      className={`grid min-h-screen place-items-center p-5 ${role === "user" ? "bg-stone-50 pb-[calc(7rem+env(safe-area-inset-bottom))] text-xl leading-[1.6] text-stone-800 [overflow-wrap:anywhere]" : "bg-stone-100"}`}
     >
       <LoginCard role={role} busy={busy} error={error} onSubmit={submit} />
     </main>

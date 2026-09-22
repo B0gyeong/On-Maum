@@ -1,10 +1,8 @@
 import type { MyDashboard } from "../../types/monitoring";
-import { formatShortDateTime } from "../../utils/format";
 import Icon from "../common/Icon";
 
 export type AwayDraft = {
   duration: number;
-  start: string;
 };
 
 type AwaySettingsProps = {
@@ -16,9 +14,6 @@ type AwaySettingsProps = {
   onUpdateAway: (enabled: boolean) => void;
 };
 
-const primaryButton = "user-action user-action-primary";
-const secondaryButton = "user-action user-action-secondary";
-
 export default function AwaySettings({
   draft,
   mode,
@@ -27,10 +22,13 @@ export default function AwaySettings({
   onDraftChange,
   onUpdateAway,
 }: AwaySettingsProps) {
-  const hasAwayMode = Boolean(mode?.enabled || mode?.scheduled);
+  const hasAwayMode = Boolean(mode?.enabled);
 
   return (
-    <section className="user-card" aria-labelledby="away-title">
+    <section
+      className="min-w-0 rounded-3xl border border-stone-200 bg-white p-6 shadow-[0_2px_10px_rgb(15_23_42_/_3%)] max-[359px]:p-5"
+      aria-labelledby="away-title"
+    >
       <h2 className="text-2xl font-bold" id="away-title">
         외출할 시간을 선택해 주세요
       </h2>
@@ -40,7 +38,11 @@ export default function AwaySettings({
           {[30, 60, 120, 240].map((minutes) => (
             <button
               type="button"
-              className={draft.duration === minutes ? primaryButton : secondaryButton}
+              className={
+                draft.duration === minutes
+                  ? "flex min-h-16 w-full items-center justify-center gap-2.5 rounded-2xl border border-brand-600 bg-brand-500 px-4 py-3.5 text-center text-[1.3125rem] leading-6 font-semibold text-white shadow-[0_4px_0_#bd4d0d,0_7px_14px_rgb(243_121_41_/_20%)] transition-[transform,box-shadow,background-color] duration-150 hover:not-disabled:bg-[#e86b1d] active:not-disabled:translate-y-[3px] active:not-disabled:shadow-[0_1px_0_#bd4d0d,0_3px_6px_rgb(74_54_35_/_8%)] disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-200 disabled:text-stone-600 disabled:shadow-none"
+                  : "flex min-h-16 w-full items-center justify-center gap-2.5 rounded-2xl border border-stone-300 bg-white px-4 py-3.5 text-center text-[1.3125rem] leading-6 font-semibold text-stone-800 shadow-[0_4px_0_#d6d3d1,0_7px_14px_rgb(15_23_42_/_6%)] transition-[transform,box-shadow,background-color] duration-150 hover:not-disabled:bg-stone-50 active:not-disabled:translate-y-[3px] active:not-disabled:shadow-[0_1px_0_#d6d3d1,0_3px_6px_rgb(15_23_42_/_6%)] disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-200 disabled:text-stone-600 disabled:shadow-none"
+              }
               key={minutes}
               aria-pressed={draft.duration === minutes}
               onClick={() => onDraftChange({ ...draft, duration: minutes })}
@@ -52,43 +54,41 @@ export default function AwaySettings({
         </div>
       </fieldset>
       <p className="mt-6 text-lg font-bold">
-        {draft.start ? `${formatShortDateTime(draft.start)} 출발` : "지금 출발"} ·{" "}
+        지금 출발 ·{" "}
         {draft.duration >= 60 && draft.duration % 60 === 0
           ? `${draft.duration / 60}시간`
           : `${draft.duration}분`} 외출
       </p>
       <div className="mt-5 grid gap-3">
         <button
-          className={primaryButton}
+          className="flex min-h-16 w-full items-center justify-center gap-2.5 rounded-2xl border border-brand-600 bg-brand-500 px-4 py-3.5 text-center text-2xl leading-6 font-semibold text-white shadow-[0_4px_0_#bd4d0d,0_7px_14px_rgb(243_121_41_/_20%)] transition-[transform,box-shadow,background-color] duration-150 hover:not-disabled:bg-[#e86b1d] active:not-disabled:translate-y-[3px] active:not-disabled:shadow-[0_1px_0_#bd4d0d,0_3px_6px_rgb(74_54_35_/_8%)] disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-200 disabled:text-stone-600 disabled:shadow-none"
           disabled={busy || !dataAvailable}
           onClick={() => onUpdateAway(true)}
         >
           <Icon name="walk" />
-          {busy
-            ? "저장 중…"
-            : draft.start
-              ? "선택한 시간으로 외출 예약하기"
-              : "지금 외출 시작하기"}
+          {busy ? "저장 중…" : "지금 외출 시작하기"}
         </button>
         {hasAwayMode && (
           <button
-            className={secondaryButton}
+            className="flex min-h-16 w-full items-center justify-center gap-2.5 rounded-2xl border border-stone-300 bg-white px-4 py-3.5 text-center text-[1.3125rem] leading-6 font-semibold text-stone-800 shadow-[0_4px_0_#d6d3d1,0_7px_14px_rgb(15_23_42_/_6%)] transition-[transform,box-shadow,background-color] duration-150 hover:not-disabled:bg-stone-50 active:not-disabled:translate-y-[3px] active:not-disabled:shadow-[0_1px_0_#d6d3d1,0_3px_6px_rgb(15_23_42_/_6%)] disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-200 disabled:text-stone-600 disabled:shadow-none"
             disabled={busy}
             onClick={() => onUpdateAway(false)}
           >
-            {mode?.scheduled ? "기존 예약 취소" : "집에 돌아왔어요"}
+            집에 돌아왔어요
           </button>
         )}
       </div>
       <p className="mt-4 text-stone-600">정한 시간이 지나면 외출 설정이 자동으로 해제돼요.</p>
       <div className="mt-6 grid gap-4 border-t border-stone-200 pt-5">
         <details className="group">
-          <summary className="user-disclosure">외출 시간 직접 입력하기</summary>
+          <summary className="min-h-16 cursor-pointer rounded-2xl border border-stone-300 p-4 font-semibold text-stone-800 transition-colors hover:bg-stone-50">
+            외출 시간 직접 입력하기
+          </summary>
           <div className="mt-4 grid gap-3">
             <label className="grid gap-2 font-semibold">
               외출 시간 (분)
               <input
-                className="user-input"
+                className="h-auto min-h-15 w-full min-w-0 rounded-xl border border-stone-400 bg-white p-3 text-stone-800"
                 type="number"
                 inputMode="numeric"
                 min="1"
@@ -101,30 +101,6 @@ export default function AwaySettings({
                 }
               />
             </label>
-          </div>
-        </details>
-        <details>
-          <summary className="user-disclosure">나중에 출발하도록 예약하기</summary>
-          <div className="mt-4 grid gap-3">
-            <label className="grid gap-2 font-semibold">
-              출발할 날짜와 시간
-              <input
-                className="user-input"
-                type="datetime-local"
-                value={draft.start}
-                disabled={busy}
-                onChange={(event) => onDraftChange({ ...draft, start: event.target.value })}
-              />
-            </label>
-            {draft.start && (
-              <button
-                className={secondaryButton}
-                disabled={busy}
-                onClick={() => onDraftChange({ ...draft, start: "" })}
-              >
-                지금 출발로 바꾸기
-              </button>
-            )}
           </div>
         </details>
       </div>

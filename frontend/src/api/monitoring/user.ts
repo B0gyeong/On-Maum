@@ -3,7 +3,6 @@ import { request } from "../client";
 
 export type AwayModeRequest = {
   enabled: boolean;
-  startsAt?: string;
   endsAt?: string;
 };
 

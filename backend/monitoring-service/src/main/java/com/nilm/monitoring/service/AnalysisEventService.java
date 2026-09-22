@@ -58,10 +58,15 @@ public class AnalysisEventService {
     public void handle(AnalysisEventMessage message) {
         validate(message);
 
+        // 이벤트 토픽에는 이 서비스가 모르는 가구(시뮬레이터 테스트 가구 등)도 흘러온다.
+        // 예외로 컨슈머를 멈추면 다른 가구의 알림까지 끊기므로 경고만 남기고 건너뛴다.
+        // 이 로그가 곧 "알림이 안 온 이유"이므로 INFO 이상으로 남긴다.
+        // household_id는 유니크라 결과는 0건 또는 1건이다.
         var matches = subjects.findHouseholdForUpdate(message.householdId());
         if (matches.size() != 1) {
-            throw new IllegalStateException("가구에 정확히 한 명의 대상자를 등록해야 합니다: "
-                    + message.householdId());
+            log.warn("대상자가 등록되지 않은 가구의 이벤트 건너뜀: householdId={}, eventId={}, eventType={}",
+                    message.householdId(), message.eventId(), message.eventType());
+            return;
         }
 
         // 재전송이나 파티션 재배치로 같은 이벤트가 다시 와도 알림을 다시 만들지 않는다.

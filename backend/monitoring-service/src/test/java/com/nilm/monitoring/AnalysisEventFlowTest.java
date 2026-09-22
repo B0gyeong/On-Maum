@@ -156,11 +156,15 @@ class AnalysisEventFlowTest {
     }
 
     @Test
-    void unknownHouseholdFailsRatherThanAcknowledgingMissingData() {
+    void 대상자_미등록_가구의_이벤트는_저장하지_않고_컨슈머도_멈추지_않는다() {
+        // 시뮬레이터 테스트 가구처럼 대상자가 없는 가구의 이벤트도 토픽에 흘러온다.
+        // 예외로 컨테이너를 멈추면 다른 가구의 알림까지 끊긴다.
         jdbc.update("delete from subjects");
-        assertThatThrownBy(() -> service.handle(message("PROLONGED_APPLIANCE_USE", "KETTLE")))
-                .isInstanceOf(IllegalStateException.class);
+        assertThatCode(() -> service.handle(message("PROLONGED_APPLIANCE_USE", "KETTLE")))
+                .doesNotThrowAnyException();
         assertThat(jdbc.queryForObject("select count(*) from analysis_events", Integer.class))
+                .isZero();
+        assertThat(jdbc.queryForObject("select count(*) from notifications", Integer.class))
                 .isZero();
     }
 }

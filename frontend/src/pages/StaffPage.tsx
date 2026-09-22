@@ -16,6 +16,7 @@ import SubjectDetail from "../components/staff/SubjectDetail";
 import SubjectList from "../components/staff/SubjectList";
 import { useSubjectsQuery } from "../hooks/api";
 import { useSubjectStream } from "../hooks/realtime/useSubjectStream";
+import { unsubscribeFromPush } from "../services/pushSubscription";
 
 export default function StaffPage() {
   const navigate = useNavigate();
@@ -35,7 +36,8 @@ export default function StaffPage() {
     ? "대상자 상세"
     : staffNavigation.find((item) => item.key === view)?.label;
 
-  const logout = () => {
+  const logout = async () => {
+    await Promise.allSettled([unsubscribeFromPush()]);
     clearSession();
     navigate("/");
   };

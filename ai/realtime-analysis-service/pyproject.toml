@@ -19,13 +19,25 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+demo = ["aiomqtt>=2,<3"]
+inference = [
+    "torch==2.11.0",
+    "numpy>=1.26,<3",
+]
 dev = [
+    "aiomqtt>=2,<3",
     "pytest>=8,<9",
     "pytest-cov>=6,<7",
 ]
 
 [project.scripts]
 realtime-analysis = "realtime_analysis.__main__:main"
+realtime-model-replay = "realtime_analysis.model_replay:main"
+realtime-scene-replay = "realtime_analysis.scene_replay:main"
+realtime-fixture-replay = "realtime_analysis.fixture_publisher:main"
+
+[tool.setuptools.package-data]
+"realtime_analysis.real_models" = ["profiles.lock.json"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

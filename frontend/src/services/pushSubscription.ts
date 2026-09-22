@@ -1,4 +1,5 @@
 import {
+  deletePushSubscription,
   registerPushSubscription,
   type PushSubscriptionRequest,
 } from "../api/monitoring";
@@ -13,6 +14,22 @@ export type PushSubscriptionStatus =
   | "error";
 
 const vapidPublicKey = import.meta.env.VITE_WEB_PUSH_VAPID_PUBLIC_KEY?.trim() ?? "";
+let synchronizationStopped = false;
+let synchronizationQueue: Promise<void> = Promise.resolve();
+let unsubscribePromise: Promise<void> | null = null;
+
+function enqueueSynchronization<T>(operation: () => Promise<T>) {
+  const result = synchronizationQueue.then(operation, operation);
+  synchronizationQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+export function resumePushSubscriptionSynchronization() {
+  if (!unsubscribePromise) synchronizationStopped = false;
+}
 
 export function getInitialPushStatus(): PushSubscriptionStatus {
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
@@ -80,7 +97,7 @@ async function getCurrentSubscription(applicationServerKey: Uint8Array<ArrayBuff
   return subscription;
 }
 
-export async function synchronizePushSubscription(requestPermission: boolean) {
+async function performPushSubscriptionSynchronization(requestPermission: boolean) {
   const initialStatus = getInitialPushStatus();
   if (initialStatus === "unsupported" || initialStatus === "unconfigured") return initialStatus;
 
@@ -97,9 +114,35 @@ export async function synchronizePushSubscription(requestPermission: boolean) {
   return "subscribed";
 }
 
-export async function unsubscribeFromPush() {
+export function synchronizePushSubscription(requestPermission: boolean) {
+  if (synchronizationStopped) return Promise.resolve(getInitialPushStatus());
+
+  return enqueueSynchronization(() => {
+    if (synchronizationStopped) return Promise.resolve(getInitialPushStatus());
+    return performPushSubscriptionSynchronization(requestPermission);
+  });
+}
+
+async function performPushUnsubscribe() {
+  await synchronizationQueue;
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-  const registration = await navigator.serviceWorker.ready;
-  const subscription = await registration.pushManager.getSubscription();
-  await subscription?.unsubscribe();
+  const registration = await navigator.serviceWorker.getRegistration();
+  const subscription = await registration?.pushManager.getSubscription();
+  if (!subscription) return;
+
+  try {
+    await deletePushSubscription(subscription.endpoint);
+  } finally {
+    await subscription.unsubscribe();
+  }
+}
+
+export function unsubscribeFromPush() {
+  synchronizationStopped = true;
+  if (!unsubscribePromise) {
+    unsubscribePromise = performPushUnsubscribe().finally(() => {
+      unsubscribePromise = null;
+    });
+  }
+  return unsubscribePromise;
 }

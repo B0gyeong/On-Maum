@@ -16,11 +16,13 @@ class AnalysisSnapshotPublisher:
         self,
         settings: Settings,
         producer: Producer | None = None,
+        *, topic: str | None = None,
     ) -> None:
-        self._topic = settings.kafka_analysis_snapshot_topic
+        self._topic = topic or settings.kafka_analysis_snapshot_topic
         self._producer = producer or Producer(settings.producer_config())
 
-    def publish(self, snapshot: AnalysisSnapshot) -> None:
+    def publish(self, snapshot: AnalysisSnapshot | dict) -> None:
+        payload = snapshot if isinstance(snapshot, dict) else snapshot.model_dump(mode="json")
         delivery_errors: list[Any] = []
 
         def on_delivery(error: Any, message: Any) -> None:
@@ -30,9 +32,9 @@ class AnalysisSnapshotPublisher:
         self._producer.produce(
             topic=self._topic,
             # 같은 가구의 Snapshot 순서가 유지되도록 household_id를 Key로 사용한다.
-            key=snapshot.household_id.encode("utf-8"),
+            key=payload["household_id"].encode("utf-8"),
             value=json.dumps(
-                snapshot.model_dump(mode="json"),
+                payload,
                 ensure_ascii=False,
             ).encode("utf-8"),
             callback=on_delivery,

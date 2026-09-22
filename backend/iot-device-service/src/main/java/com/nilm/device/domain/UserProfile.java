@@ -45,6 +45,14 @@ public class UserProfile {
     @Column(nullable = false, length = 15)
     private Status status = Status.ACTIVE;
 
+    /**
+     * 초기 비밀번호를 아직 쓰고 있다는 표시.
+     * 담당자가 대리 생성하면 켜지고, 본인이 비밀번호를 바꾸면 꺼진다.
+     * 켜져 있는 동안의 응답은 담당자가 대신 눌렀을 가능성이 있다.
+     */
+    @Column(name = "password_reset_required", nullable = false)
+    private boolean passwordResetRequired = false;
+
     @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
     private OffsetDateTime createdAt;
 
@@ -53,6 +61,11 @@ public class UserProfile {
 
     public UserProfile(UUID keycloakUserId, String email, String displayName,
                        String phone, String organization) {
+        this(keycloakUserId, email, displayName, phone, organization, false);
+    }
+
+    public UserProfile(UUID keycloakUserId, String email, String displayName,
+                       String phone, String organization, boolean passwordResetRequired) {
         this.keycloakUserId = keycloakUserId;
         this.email = email;
         this.displayName = displayName;
@@ -60,6 +73,32 @@ public class UserProfile {
         this.organization = organization;
         // 승인 절차가 없으므로 기관 소속 가입도 바로 활성이다.
         this.status = Status.ACTIVE;
+        this.passwordResetRequired = passwordResetRequired;
+    }
+
+    /** 본인이 비밀번호를 바꾸면 초기 비밀번호 표시를 내린다. */
+    public void clearPasswordResetRequired() {
+        this.passwordResetRequired = false;
+    }
+
+    public boolean isPasswordResetRequired() {
+        return passwordResetRequired;
+    }
+
+    /**
+     * 프로필 부분 수정 — null은 "바꾸지 않음"이다.
+     *
+     * <p>이메일은 Keycloak의 사용자명이자 로그인 키라 여기서 바꾸지 않는다.
+     * 기관 소속도 제외한다 — 바뀌면 monitoring의 담당자 명단까지 따라가야 하므로
+     * 별도 절차가 필요하다.
+     */
+    public void updateProfile(String displayName, String phone) {
+        if (displayName != null && !displayName.isBlank()) {
+            this.displayName = displayName;
+        }
+        if (phone != null) {
+            this.phone = phone.isBlank() ? null : phone;
+        }
     }
 
     public void suspend() {

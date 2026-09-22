@@ -2,7 +2,9 @@ import type { AuthTokens } from "../types/auth";
 
 const ACCESS_TOKEN_KEY = "onmaeum.accessToken";
 const REFRESH_TOKEN_KEY = "onmaeum.refreshToken";
+const SESSION_ROLE_KEY = "onmaeum.sessionRole";
 export const SESSION_EVENT = "onmaeum:session-changed";
+export type SessionRole = "staff" | "user";
 let generation = 0;
 
 function hasPersistentSession() {
@@ -25,6 +27,11 @@ export function getRefreshToken() {
   return getStoredToken(REFRESH_TOKEN_KEY);
 }
 
+export function getSessionRole(): SessionRole | null {
+  const role = getStoredToken(SESSION_ROLE_KEY);
+  return role === "staff" || role === "user" ? role : null;
+}
+
 export function hasSession() {
   return Boolean(getAccessToken());
 }
@@ -33,15 +40,23 @@ export function getSessionGeneration() {
   return generation;
 }
 
-export function saveSession(tokens: AuthTokens, persistent = hasPersistentSession()) {
+export function saveSession(
+  tokens: AuthTokens,
+  persistent = hasPersistentSession(),
+  role = getSessionRole(),
+) {
   const wasActive = hasSession();
+  const previousRole = getSessionRole();
   const storage = persistent ? localStorage : sessionStorage;
   const previousStorage = persistent ? sessionStorage : localStorage;
   previousStorage.removeItem(ACCESS_TOKEN_KEY);
   previousStorage.removeItem(REFRESH_TOKEN_KEY);
+  previousStorage.removeItem(SESSION_ROLE_KEY);
   storage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
   storage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
-  if (!wasActive) notifySessionChanged();
+  if (role) storage.setItem(SESSION_ROLE_KEY, role);
+  else storage.removeItem(SESSION_ROLE_KEY);
+  if (!wasActive || previousRole !== role) notifySessionChanged();
 }
 
 export function clearSession() {
@@ -49,7 +64,9 @@ export function clearSession() {
   generation += 1;
   sessionStorage.removeItem(ACCESS_TOKEN_KEY);
   sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+  sessionStorage.removeItem(SESSION_ROLE_KEY);
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(SESSION_ROLE_KEY);
   if (wasActive) notifySessionChanged();
 }

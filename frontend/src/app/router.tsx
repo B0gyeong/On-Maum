@@ -1,5 +1,6 @@
 import { createBrowserRouter, createRoutesFromElements, Navigate, Route } from "react-router-dom";
 import ProtectedRoute from "../components/common/ProtectedRoute";
+import DashboardPreviewPage from "../pages/DashboardPreviewPage";
 import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
 import StaffPage from "../pages/StaffPage";
@@ -9,11 +10,19 @@ export const router = createBrowserRouter(
   createRoutesFromElements(
     <>
       <Route path="/" element={<HomePage />} />
-      <Route path="/staff" element={<ProtectedRoute fallback={<LoginPage role="staff" />} />}>
+      <Route path="/dashboard-preview" element={<DashboardPreviewPage />} />
+      <Route path="/dashboard-preview-alert" element={<DashboardPreviewPage danger />} />
+      <Route
+        path="/staff"
+        element={<ProtectedRoute role="staff" fallback={<LoginPage role="staff" />} />}
+      >
         <Route index element={<StaffPage />} />
         <Route path="subjects/:subjectId" element={<StaffPage />} />
       </Route>
-      <Route path="/user" element={<ProtectedRoute fallback={<LoginPage role="user" />} />}>
+      <Route
+        path="/user"
+        element={<ProtectedRoute role="user" fallback={<LoginPage role="user" />} />}
+      >
         <Route index element={<UserPage />} />
         <Route path="orange-preview" element={<UserPage comparison />} />
       </Route>

@@ -73,6 +73,11 @@ class PushDispatchFlowTest {
         service.handle(event);
         verify(sender, times(1)).send(any(), anyMap(), anyInt());
         assertThat(jdbc.queryForObject("select send_status from notifications", String.class)).isEqualTo("SENT");
+        // 생성·갱신 시각이 DB 열로 남아야 발송 지연과 마지막 상태 변경 시각을 행에서 바로 읽을 수 있다.
+        var createdAt = jdbc.queryForObject("select created_at from notifications", OffsetDateTime.class);
+        var updatedAt = jdbc.queryForObject("select updated_at from notifications", OffsetDateTime.class);
+        assertThat(createdAt).isNotNull();
+        assertThat(updatedAt).isAfterOrEqualTo(createdAt);
     }
 
     @Test

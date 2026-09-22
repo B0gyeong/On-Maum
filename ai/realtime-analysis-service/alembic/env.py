@@ -8,6 +8,8 @@ from sqlalchemy import create_engine, pool
 from realtime_analysis.config import get_settings
 from realtime_analysis.database import Base, build_database_url
 from realtime_analysis import models  # noqa: F401
+from realtime_analysis import scene_pipeline  # noqa: F401
+from realtime_analysis import scene_events  # noqa: F401
 
 
 config = context.config

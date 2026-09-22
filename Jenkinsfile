@@ -80,8 +80,8 @@ pipeline {
             description: 'master 배포 활성화. master 푸시로 시작된 자동 빌드는 이 값과 무관하게 항상 배포하며, 수동 빌드(Build with Parameters)에서만 해제할 수 있다')
         string(name: 'IMAGE_REPOSITORY', defaultValue: 'docker.io/leejeongmin24/on-maum',
             description: 'Docker Hub Private repository: docker.io/account/repository (no tag)')
-        string(name: 'FRONTEND_ENV_CREDENTIAL', defaultValue: '',
-            description: 'Optional Secret file credential for public Vite build settings')
+        string(name: 'FRONTEND_ENV_CREDENTIAL', defaultValue: 'frontend-build-env',
+            description: 'Secret file credential for public Vite build settings. master 빌드에만 주입되며, 비우면 프론트가 공개 변수 없이 빌드된다')
     }
     stages {
         stage('CI') {

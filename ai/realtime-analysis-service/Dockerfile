@@ -27,6 +27,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY tests ./tests
 RUN pytest
 
+FROM base AS inference
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu && \
+    pip install '.[inference,demo]'
+EXPOSE 8000
+CMD ["sh", "-c", "alembic upgrade head && exec python -m realtime_analysis"]
+
 FROM base AS runtime
 
 EXPOSE 8000

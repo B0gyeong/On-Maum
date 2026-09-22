@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import QueryProvider from "./providers/QueryProvider";
 import "./styles/global.css";
+import AgentationClient from "./utils/AgentationClient";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -16,6 +17,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryProvider>
       <App />
+      <AgentationClient />
     </QueryProvider>
   </StrictMode>,
 );

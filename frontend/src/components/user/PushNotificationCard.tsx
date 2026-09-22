@@ -26,7 +26,10 @@ export default function PushNotificationCard({
 
   const denied = status === "denied";
   return (
-    <section className="user-card" aria-labelledby="push-title">
+    <section
+      className="min-w-0 rounded-3xl border border-stone-200 bg-white p-6 shadow-[0_2px_10px_rgb(15_23_42_/_3%)] max-[359px]:p-5"
+      aria-labelledby="push-title"
+    >
       <h2 className="text-xl font-bold" id="push-title">
         안심 알림 받기
       </h2>
@@ -41,7 +44,7 @@ export default function PushNotificationCard({
         </p>
       )}
       <button
-        className="user-action user-action-secondary mt-5"
+        className="mt-5 flex min-h-16 w-full items-center justify-center rounded-2xl border border-stone-300 bg-white px-4 py-3.5 text-center text-[1.3125rem] leading-6 font-semibold text-stone-800 shadow-[0_4px_0_#d6d3d1,0_7px_14px_rgb(15_23_42_/_6%)] transition-[transform,box-shadow,background-color] duration-150 hover:not-disabled:bg-stone-50 active:not-disabled:translate-y-[3px] active:not-disabled:shadow-[0_1px_0_#d6d3d1,0_3px_6px_rgb(15_23_42_/_6%)] disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-200 disabled:text-stone-600 disabled:shadow-none"
         disabled={status === "syncing"}
         onClick={status === "error" || denied ? onRetry : onEnable}
       >

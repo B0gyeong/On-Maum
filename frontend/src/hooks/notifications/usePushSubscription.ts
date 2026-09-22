@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getApiErrorMessage } from "../../api/client";
 import {
   getInitialPushStatus,
+  resumePushSubscriptionSynchronization,
   synchronizePushSubscription,
   unsubscribeFromPush,
   type PushSubscriptionStatus,
@@ -23,6 +24,8 @@ export function usePushSubscription() {
   }, []);
 
   useEffect(() => {
+    resumePushSubscriptionSynchronization();
+
     const refresh = () => {
       if (document.visibilityState === "visible") void synchronize(false);
     };
