@@ -251,6 +251,9 @@ public class RiskAssessmentService {
 
         // 설정이 꺼져 있어도 행은 남긴다. 막는 것은 발송뿐이다.
         if (notificationGate.allows(subject, level, NotificationSetting.Channel.PUSH)) {
+            log.info("자체 평가 알림 생성, 웹푸시 발송 요청: notificationId={}, subjectId={}, level={}, "
+                            + "등급상승={}",
+                    notification.getId(), subject.getId(), level, outcome.raised());
             publisher.publishEvent(new NotificationReady(
                     notification.getId(),
                     "안전 확인 요청",

@@ -29,11 +29,38 @@ $env:R3_TEST_ASSET_ROOT = (Resolve-Path ../assets/nilm_r3).Path
 .venv/Scripts/python -m pytest tests/test_real_predictor.py -q
 ```
 
-## 현재 통합 범위
+## 실시간 서비스 통합
+
+`MODEL_BACKEND=real`이면 기존 `power.raw.v1` 소비, 활동 세션, 이상 탐지와
+`analysis.snapshot.v1` 계약은 유지하면서 실제 체크포인트 6개를 모두 실행한다.
+각 체크포인트는 같은 255행 원본 P/Q/PF/I 창을 입력받고 내부에서 자신의 정규화를
+적용한다. `RealtimeModelPredictor`가 결과를 기존 가전 순서의 6개 확률로 합치며,
+상태 판정은 reviewer lock의 가전별 ON/OFF threshold와 `confirm`을 사용한다.
+
+```dotenv
+MODEL_BACKEND=real
+MODEL_ASSET_ROOT=../assets/nilm_r3
+MODEL_WINDOW_SIZE=255
+MODEL_DEVICE=cpu
+MODEL_DTYPE=float32
+MODEL_THREADS=1
+```
+
+체크포인트 하나라도 없거나 SHA가 다르거나 모델 로딩·forward가 실패하면 메시지 처리를
+실패시키며 fake 결과로 대체하지 않는다. 로컬·EC2 Compose의 기본 분석 서비스 이미지는
+가중치와 PyTorch를 포함한 `realtime-inference` target을 사용한다.
+
+현재 잠긴 6개 profile은 서로 다른 가구의 선택 장면에서 각각 검증된 결과다. 따라서
+6개 모델을 한 가구 스트림에 실행할 수 있게 된 것은 서버 통합 완료를 의미하지만,
+임의 가구에 대한 6종 동시 정확도 검증을 의미하지 않는다. 운영 전 대표 가구 데이터로
+교차 가구 정확도와 오탐률을 별도로 검수해야 한다.
+
+## 선택 장면 통합
 
 `MODEL_BACKEND=selected_scene`이면 `realtime-analysis` 진입점이 실제 Predictor와
-`SceneHandler`를 사용한다. `fake` 기본값은 기존 배포와 호환된다. 선택 모드는 별도
-input topic, consumer group, run ID, asset root를 필수로 요구한다.
+`SceneHandler`를 사용한다. Python 설정의 기본값 `fake`는 단위 테스트와 명시적인
+개발 실행을 위해 유지한다. 선택 모드는 별도 input topic, consumer group, run ID,
+asset root를 필수로 요구한다.
 
 입력은 run_id/profile_id/source_index/valid/context를 보존한다. context는 prefix 표시가
 아닌 추론 유효성 마스크이며, 결측 행은 참조 norm의 mean으로 채워 정규화 후 0이 된다.

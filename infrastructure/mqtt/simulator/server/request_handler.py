@@ -23,6 +23,22 @@ PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PARENT_DIR not in sys.path:
     sys.path.append(PARENT_DIR)
 
+VIEWER_ASSETS = {
+    "waveform.css": "text/css; charset=utf-8",
+    "panels.js": "text/javascript; charset=utf-8",
+    "state.js": "text/javascript; charset=utf-8",
+    "households.js": "text/javascript; charset=utf-8",
+    "devices.js": "text/javascript; charset=utf-8",
+    "powerflow.js": "text/javascript; charset=utf-8",
+    "charts.js": "text/javascript; charset=utf-8",
+    "physics.js": "text/javascript; charset=utf-8",
+    "realtime.js": "text/javascript; charset=utf-8",
+    "server_stream.js": "text/javascript; charset=utf-8",
+    "controls.js": "text/javascript; charset=utf-8",
+    "events.js": "text/javascript; charset=utf-8",
+    "e2e.js": "text/javascript; charset=utf-8",
+}
+
 import simulator
 import scenarios
 from .config import ALLOWED_SCENARIOS, validate_interval
@@ -77,6 +93,25 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(content)
             except Exception as e:
                 self.send_error(500, f"HTML 파일 로드 실패: {e}")
+
+        elif url_path.startswith("/assets/"):
+            asset_name = url_path.removeprefix("/assets/")
+            content_type = VIEWER_ASSETS.get(asset_name)
+            if content_type is None:
+                self.send_error(404, "Not Found")
+                return
+            html_path = self.html_path or os.path.join(PARENT_DIR, "waveform_viewer.html")
+            asset_path = os.path.join(os.path.dirname(html_path), "assets", asset_name)
+            try:
+                with open(asset_path, "rb") as asset_file:
+                    content = asset_file.read()
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+            except OSError as err:
+                self.send_error(500, f"정적 파일 로드 실패: {err}")
 
         elif url_path == "/api/status":
             # 2. 현재 시뮬레이터 실행 상태 확인 (원자적 스냅샷 조회)

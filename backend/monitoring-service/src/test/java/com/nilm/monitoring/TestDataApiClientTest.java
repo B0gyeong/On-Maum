@@ -45,7 +45,7 @@ class TestDataApiClientTest {
         TestDataApiClient.SeedAccount account = client.ensureUser(
                 "subject01@nilm.local",
                 "Test1234!",
-                "테스트 대상자 01",
+                "대상자 01",
                 "01010000001",
                 null
         );
@@ -72,7 +72,7 @@ class TestDataApiClientTest {
         TestDataApiClient.SeedAccount account = client.ensureUser(
                 "subject01@nilm.local",
                 "Test1234!",
-                "테스트 대상자 01",
+                "대상자 01",
                 "01010000001",
                 null
         );
@@ -137,7 +137,7 @@ class TestDataApiClientTest {
                         {
                           "userId": "%s",
                           "email": "subject01@nilm.local",
-                          "displayName": "테스트 대상자 01",
+                          "displayName": "대상자 01",
                           "status": "ACTIVE"
                         }
                         """.formatted(USER_ID), MediaType.APPLICATION_JSON)
@@ -166,7 +166,7 @@ class TestDataApiClientTest {
                           "profile": {
                             "userId": "%s",
                             "email": "subject01@nilm.local",
-                            "displayName": "테스트 대상자 01",
+                            "displayName": "대상자 01",
                             "status": "ACTIVE"
                           },
                           "households": %s

@@ -56,11 +56,11 @@ class ManagerInitializerTest {
                 Integer.class
         )).isEqualTo(10);
         assertThat(jdbc.queryForObject(
-                "SELECT auth_sub FROM managers WHERE name = '테스트 담당자 01'",
+                "SELECT auth_sub FROM managers WHERE name = '담당자 01'",
                 String.class
         )).isEqualTo(userId("manager01@nilm.local").toString());
         assertThat(jdbc.queryForObject(
-                "SELECT phone FROM managers WHERE name = '테스트 담당자 01'",
+                "SELECT phone FROM managers WHERE name = '담당자 01'",
                 String.class
         )).isEqualTo("01020000001");
         assertThat(initializer.managerIdFor(10)).isPositive();

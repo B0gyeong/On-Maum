@@ -136,7 +136,7 @@ class SubjectInitializerTest {
         assertThat(adopted.get("id")).isEqualTo(originalId);
         assertThat(adopted.get("auth_sub"))
                 .isEqualTo(userId("subject01@nilm.local").toString());
-        assertThat(adopted.get("name")).isEqualTo("테스트 대상자 01");
+        assertThat(adopted.get("name")).isEqualTo("대상자 01");
         assertThat(adopted.get("manager_id")).isEqualTo(1L);
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM subjects",

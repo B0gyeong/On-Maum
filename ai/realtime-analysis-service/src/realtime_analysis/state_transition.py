@@ -1,6 +1,6 @@
 """Debounced and hysteretic appliance ON/OFF transition detection."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
@@ -29,15 +29,22 @@ class ApplianceStateTransitionDetector:
         on_confirmation_samples: int,
         off_confirmation_samples: int,
         off_threshold_margin: float,
+        *,
+        off_thresholds: Mapping[str, float] | None = None,
     ) -> None:
         if on_confirmation_samples < 1 or off_confirmation_samples < 1:
             raise ValueError("confirmation samples must be at least one")
         if not 0 <= off_threshold_margin <= 1:
             raise ValueError("off_threshold_margin must be between zero and one")
+        if off_thresholds is not None and any(
+            not 0 <= threshold <= 1 for threshold in off_thresholds.values()
+        ):
+            raise ValueError("off thresholds must be between zero and one")
 
         self._on_confirmation_samples = on_confirmation_samples
         self._off_confirmation_samples = off_confirmation_samples
         self._off_threshold_margin = off_threshold_margin
+        self._off_thresholds = dict(off_thresholds or {})
         self._memory: dict[tuple[str, str], _ApplianceMemory] = {}
 
     def detect(
@@ -146,6 +153,16 @@ class ApplianceStateTransitionDetector:
     ) -> bool | None:
         if not stable_is_on:
             return True if state.probability >= state.threshold else False
+
+        explicit_off_threshold = self._off_thresholds.get(state.appliance_type)
+        if explicit_off_threshold is not None:
+            if state.probability >= state.threshold:
+                return True
+            if explicit_off_threshold == state.threshold:
+                return False if state.probability < explicit_off_threshold else None
+            if state.probability <= explicit_off_threshold:
+                return False
+            return None
 
         off_threshold = max(0.0, state.threshold - self._off_threshold_margin)
         if state.probability <= off_threshold:

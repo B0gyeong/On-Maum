@@ -125,9 +125,10 @@ class MeasurementHandler:
             return
 
         try:
-            predictions = self._predictor.predict(
-                self._buffer.get_window(measurement.household_id)
-            )
+            with stage("inference"):
+                predictions = self._predictor.predict(
+                    self._buffer.get_window(measurement.household_id)
+                )
         except Exception as error:
             self._record_outcome(
                 measurement,

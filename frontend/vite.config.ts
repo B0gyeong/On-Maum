@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
+      '/api/monitoring/admin/selected-scene': 'http://127.0.0.1:18084',
       '/api': 'http://localhost:8080',
     },
   },

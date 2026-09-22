@@ -169,11 +169,19 @@ public class AnalysisEventService {
             return;
         }
         if (pushEnabled) {
+            log.info("이벤트 알림 생성, 웹푸시 발송 요청: notificationId={}, subjectId={}, eventId={}, "
+                            + "eventType={}, level={}",
+                    notification.getId(), subject.getId(), message.eventId(),
+                    message.eventType(), level);
             publisher.publishEvent(new NotificationReady(
                     notification.getId(),
                     "안전 확인 요청",
                     narrator.describeDetail(stored)
             ));
+        } else {
+            // 알림 행은 남았는데 폰에 아무것도 안 오는 상황의 이유를 그대로 남긴다.
+            log.info("웹푸시가 꺼져 있어 발송하지 않는다: notificationId={}, subjectId={}",
+                    notification.getId(), subject.getId());
         }
     }
 

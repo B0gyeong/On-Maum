@@ -65,7 +65,7 @@ public class SubjectInitializer implements SmartInitializingSingleton {
     }
 
     private void createOrLinkSubject(int index) {
-        String name = String.format("테스트 대상자 %02d", index);
+        String name = String.format("대상자 %02d", index);
         String email = String.format("subject%02d@nilm.local", index);
         String phone = String.format("0101%07d", index);
         String houseId = String.format("H%03d", index);

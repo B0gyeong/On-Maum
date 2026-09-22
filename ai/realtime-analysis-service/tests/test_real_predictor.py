@@ -5,8 +5,10 @@ from pathlib import Path
 import pytest
 
 from realtime_analysis.real_predictor import (
-    SelectedScenePredictor, load_profile, verified_asset,
+    RealtimeModelPredictor, SelectedScenePredictor, load_profile, verified_asset,
 )
+from realtime_analysis.predictor import APPLIANCE_ORDER
+from realtime_analysis.schemas import AppliancePrediction
 from realtime_analysis.selected_scene import SelectedSceneDecoder, float32
 
 
@@ -51,6 +53,50 @@ def test_frozen_selection():
     assert load_profile("microwave")["source_house"] == "H063"
     with pytest.raises(ValueError):
         load_profile("air_fryer")
+
+
+def test_realtime_predictor_combines_six_models_in_contract_order(monkeypatch):
+    import realtime_analysis.real_predictor as module
+
+    class StubPredictor:
+        def __init__(self, asset_root, appliance, **kwargs):
+            index = APPLIANCE_ORDER.index(appliance)
+            self.profile = {
+                "appliance_type": appliance.lower(),
+                "fixed_window_steps": 255,
+                "threshold": {"on": 0.9, "off": 0.7, "confirm": 1},
+                "checkpoint_sha256": f"{index:064x}",
+            }
+            self.probability = index / 10
+
+        def predict(self, window):
+            return [
+                AppliancePrediction(
+                    appliance_type=self.profile["appliance_type"].upper(),
+                    probability=self.probability,
+                )
+            ]
+
+    monkeypatch.setattr(module, "SelectedScenePredictor", StubPredictor)
+    predictor = RealtimeModelPredictor("/unused")
+
+    predictions = predictor.predict([(0.0, 0.0, 0.0, 0.0)] * 255)
+
+    assert tuple(item.appliance_type for item in predictions) == APPLIANCE_ORDER
+    assert [item.probability for item in predictions] == [
+        0.0,
+        0.1,
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+    ]
+    assert predictor.confirmation_samples == 1
+    assert set(predictor.on_thresholds) == set(APPLIANCE_ORDER)
+    assert set(predictor.off_thresholds) == set(APPLIANCE_ORDER)
+
+    with pytest.raises(ValueError, match="255 realtime model input rows"):
+        predictor.predict([(0.0, 0.0, 0.0, 0.0)] * 254)
 
 
 @pytest.fixture

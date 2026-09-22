@@ -19,15 +19,29 @@ RUN python -m realtime_analysis.asset_check --asset-root /assets --panels
 USER 65532:65532
 ENTRYPOINT ["python", "-m", "realtime_analysis.fixture_publisher"]
 
-FROM service AS inference
+FROM service AS model-runtime
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu && pip install 'numpy>=1.26,<3'
 COPY assets/nilm_r3/weights /assets/weights
 COPY assets/nilm_r3/source_snapshot/m1/normalization.json /assets/source_snapshot/m1/normalization.json
-RUN python -m realtime_analysis.asset_check --asset-root /assets
-ENV MODEL_BACKEND=selected_scene MODEL_ASSET_ROOT=/assets MODEL_DEVICE=cpu MODEL_DTYPE=float32 MODEL_THREADS=1
+RUN python -m realtime_analysis.asset_check --asset-root /assets --forward
 USER 65532:65532
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=6 \
     CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.getenv('HTTP_PORT','8000')+'/ready',timeout=4).close()"
+
+FROM model-runtime AS inference
+ENV MODEL_BACKEND=selected_scene MODEL_ASSET_ROOT=/assets MODEL_DEVICE=cpu MODEL_DTYPE=float32 MODEL_THREADS=1
 ENTRYPOINT ["python", "-m", "realtime_analysis.scene_entrypoint"]
+
+# Local Compose target. Unlike the fail-closed deployment targets below, this
+# target deliberately allows MODEL_BACKEND=fake|real|selected_scene so developers
+# can switch modes through infrastructure/local/.env without rebuilding a
+# different image target.
+FROM model-runtime AS local-inference
+ENV MODEL_BACKEND=real MODEL_ASSET_ROOT=/assets MODEL_WINDOW_SIZE=255 MODEL_DEVICE=cpu MODEL_DTYPE=float32 MODEL_THREADS=1
+ENTRYPOINT ["python", "-m", "realtime_analysis.configurable_entrypoint"]
+
+FROM model-runtime AS realtime-inference
+ENV MODEL_BACKEND=real MODEL_ASSET_ROOT=/assets MODEL_WINDOW_SIZE=255 MODEL_DEVICE=cpu MODEL_DTYPE=float32 MODEL_THREADS=1
+ENTRYPOINT ["python", "-m", "realtime_analysis.real_entrypoint"]

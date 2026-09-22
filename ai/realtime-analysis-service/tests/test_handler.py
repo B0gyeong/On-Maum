@@ -1,3 +1,5 @@
+import json
+import logging
 from datetime import datetime, timedelta
 from unittest.mock import Mock
 from uuid import UUID
@@ -14,6 +16,7 @@ from realtime_analysis.buffer import HouseholdBuffer
 from realtime_analysis.data_quality_monitor import DataQualityMonitor
 from realtime_analysis.handler import MeasurementHandler
 from realtime_analysis.metrics import AnalysisMetrics
+from realtime_analysis.pipeline_timing import pipeline_timing
 from realtime_analysis.predictor import APPLIANCE_ORDER, FakePredictor
 from realtime_analysis.schemas import (
     AnalysisEvent,
@@ -142,6 +145,47 @@ def test_pipeline_publishes_event_after_buffer_is_ready() -> None:
         "nilm_pattern_events_total",
         {"event_type": "ROUTINE_MISSED"},
     ) == 1
+
+
+def test_pipeline_records_predictor_duration_as_inference_stage(caplog) -> None:
+    observed = measurement(0)
+    handler = MeasurementHandler(
+        buffer=HouseholdBuffer(window_size=1),
+        predictor=FakePredictor(),
+        state_decider=ApplianceStateDecider(
+            {appliance_type: 0.5 for appliance_type in APPLIANCE_ORDER}
+        ),
+        state_transition_detector=ApplianceStateTransitionDetector(3, 3, 0.05),
+        activity_repository=Mock(),
+        baseline_repository=BaselineRepository([]),
+        tracker=DailyActivityTracker(),
+        detector=RoutineMissedDetector(DailyActivityTracker(), 80, "Asia/Seoul"),
+        event_publisher=RecordingPublisher(),  # type: ignore[arg-type]
+        snapshot_publisher=RecordingSnapshotPublisher(),  # type: ignore[arg-type]
+        timezone_name="Asia/Seoul",
+    )
+
+    with caplog.at_level(
+        logging.INFO,
+        logger="realtime_analysis.pipeline_timing",
+    ):
+        with pipeline_timing(
+            kafka_topic="power.raw.v1",
+            kafka_partition=0,
+            kafka_offset=1,
+        ) as timer:
+            timer.bind_measurement(observed)
+            handler(observed)
+            timer.mark("processed")
+
+    records = [
+        json.loads(record.message)
+        for record in caplog.records
+        if record.name == "realtime_analysis.pipeline_timing"
+    ]
+    assert len(records) == 1
+    assert records[0]["stage_counts"]["inference"] == 1
+    assert records[0]["stage_durations_ns"]["inference"] >= 0
 
 
 def test_pipeline_does_not_mark_event_when_kafka_publish_fails() -> None:

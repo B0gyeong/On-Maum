@@ -1,20 +1,31 @@
 # 인프라 담당자용 실제 모델 이미지
 
-기존 Jenkins/EC2 Compose는 이 브랜치에서 수정하지 않았다. 아래 build 명령과 image/env/topic
-설정을 담당자가 연결해야 실제 EC2 배포에 반영된다. feature push만으로 배포되지 않는다.
+실시간 분석 서버는 `realtime-inference`, 선택 장면 검수 worker는 `inference` target을
+사용한다. 두 target 모두 동일한 실제 체크포인트와 검증된 모델 코드를 포함한다.
 
 저장소 루트에서:
 
 ```sh
+docker build -f ai/deployment/Dockerfile --target realtime-inference -t nilm-realtime-inference:REV ai
 docker build -f ai/deployment/Dockerfile --target inference -t nilm-scene-inference:REV ai
 docker build -f ai/deployment/Dockerfile --target fixture-publisher -t nilm-scene-fixture:REV ai
+docker run --rm --entrypoint python nilm-realtime-inference:REV -m realtime_analysis.asset_check --asset-root /assets
 docker run --rm --entrypoint python nilm-scene-inference:REV -m realtime_analysis.asset_check --asset-root /assets
 docker run --rm nilm-scene-fixture:REV --help
 ```
 
+`realtime-inference`는 `MODEL_BACKEND=real`, 255행 창으로 기존 실시간 파이프라인에서
+6개 모델을 실행한다. Jenkins build와 EC2 Compose의 기본 분석 서비스가 이 target을
+사용한다. `inference`는 `MODEL_BACKEND=selected_scene` 전용이며 기존 검수 절차를 유지한다.
+
+로컬 Compose는 `local-inference` target을 사용한다. 이 target만
+`infrastructure/local/.env`의 `ANALYSIS_MODEL_BACKEND` 값으로 `fake`, `real`,
+`selected_scene`을 전환할 수 있다. 운영용 `realtime-inference`와 `inference` target의
+fail-closed 제한은 그대로 유지한다.
+
 추론 이미지는 체크포인트 6개·norm·잠긴 모델 코드를 포함한다. 별도 host asset mount가 필요 없다.
 발행 이미지는 raw panel만 포함한다. 두 이미지 모두 정답·기준 점수·외부 credential을 포함하지 않는다.
-빌드 시와 worker 시작 시 SHA를 검사한다. worker는 fake 설정 또는 가구 미지정 시 시작을 거부한다.
+빌드 시와 worker 시작 시 SHA를 검사한다. 운영용 worker는 fake 설정 또는 가구 미지정 시 시작을 거부한다.
 CPU float32/thread 1/batch 1이 기본이며 worker 시작 전에 Alembic head를 적용한다.
 공유 DB에 여러 가구 worker를 처음 배포할 때 migration을 먼저 한 번 완료한 뒤 순차 시작한다.
 가구 lock은 모델 처리 독점용이며 Alembic 동시 migration을 직렬화하지 않는다.

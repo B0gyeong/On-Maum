@@ -62,6 +62,40 @@ def test_hysteresis_holds_on_until_probability_is_below_off_threshold() -> None:
     assert detector.is_on("H001", "MICROWAVE") is False
 
 
+def test_explicit_model_off_threshold_overrides_global_margin() -> None:
+    detector = ApplianceStateTransitionDetector(
+        1,
+        1,
+        0.05,
+        off_thresholds={"MICROWAVE": 0.2},
+    )
+    assert len(detect(detector, 0, 0.8)) == 1
+
+    assert detect(detector, 1, 0.3) == []
+    assert detector.is_on("H001", "MICROWAVE") is True
+    transitions = detect(detector, 2, 0.2)
+
+    assert len(transitions) == 1
+    assert transitions[0].transition_type == ApplianceTransitionType.TURNED_OFF
+
+
+def test_equal_model_threshold_keeps_on_at_boundary() -> None:
+    detector = ApplianceStateTransitionDetector(
+        1,
+        1,
+        0,
+        off_thresholds={"MICROWAVE": 0.5},
+    )
+    assert len(detect(detector, 0, 0.5)) == 1
+
+    assert detect(detector, 1, 0.5) == []
+    assert detector.is_on("H001", "MICROWAVE") is True
+    transitions = detect(detector, 2, 0.49)
+
+    assert len(transitions) == 1
+    assert transitions[0].transition_type == ApplianceTransitionType.TURNED_OFF
+
+
 def test_probability_bounce_resets_pending_transition() -> None:
     detector = ApplianceStateTransitionDetector(3, 3, 0.05)
 

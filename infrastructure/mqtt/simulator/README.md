@@ -30,6 +30,8 @@
 | **`web_server.py`**         | **인터랙티브 웹 서버 진입점** (CLI 인자 처리, 서버 초기화 및 실행)                                             |
 | **`server/`**               | **웹 서버 모듈 패키지** (`config.py`, `manager.py`, `request_handler.py` 책임 분리)                              |
 | **`waveform_viewer.html`**  | 브라우저 기반 실시간 인터랙티브 시각화 대시보드 (원클릭 피크 시연 버튼, 실시간 차트, 가전 상태 칩)               |
+| **`assets/waveform.css`**   | 대시보드 공통 스타일                                                                                             |
+| **`assets/*.js`**          | 상태·가구·가전·차트·물리 계산·실시간 스트림·제어·이벤트·E2E 기능별 브라우저 코드                                  |
 | **`visualize_waveform.py`** | 파형 시뮬레이션 데이터 생성 및 CSV/HTML 리포트 정적 출력 도구                                                    |
 | **`requirements.txt`**      | 시뮬레이터 실행에 필요한 최소 의존성 목록 (`aiomqtt`)                                                            |
 
@@ -279,6 +281,8 @@ python simulator.py \
 웹 브라우저에서 직접 버튼을 클릭하여 시뮬레이터를 제어하고, 실시간 전력 파형 시각화와 **실제 Mosquitto MQTT 발행(Kafka 연동)**을 동시에 수행할 수 있습니다.
 
 웹 컨트롤러 HTTP 서버는 보안을 위해 **기본적으로 `127.0.0.1`에만 바인딩**됩니다.
+
+화면 마크업은 `waveform_viewer.html`, 스타일은 `assets/waveform.css`, 동작은 `assets/`의 JavaScript 파일에 있습니다. JavaScript는 HTML에 적힌 순서대로 로드되며, `state.js`가 공통 상태를 초기화하고 `e2e.js`가 E2E 패널을 담당합니다. HTML 파일을 직접 열 때도 같은 디렉터리의 `assets/` 폴더가 필요합니다.
 
 > [!CAUTION]
 > * **0.0.0.0 바인딩 및 인증되지 않은 제어 API 노출 위험**:

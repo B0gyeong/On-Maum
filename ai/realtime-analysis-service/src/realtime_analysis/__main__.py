@@ -85,7 +85,39 @@ def main() -> None:
     # 이상 탐지기 생성
     tracker = DailyActivityTracker()
     manifest = ModelManifest.from_json_file(settings.model_manifest_file)
-    METRICS.set_model_info(manifest.model_name, manifest.version)
+    model_version = manifest.version
+    if settings.model_backend == "real":
+        import torch
+        from realtime_analysis.real_predictor import RealtimeModelPredictor
+
+        torch.set_num_threads(settings.model_threads)
+        predictor = RealtimeModelPredictor(
+            settings.model_asset_root,
+            device=settings.model_device,
+            dtype=settings.model_dtype,
+        )
+        state_decider = ApplianceStateDecider(predictor.on_thresholds)
+        state_transition_detector = ApplianceStateTransitionDetector(
+            on_confirmation_samples=predictor.confirmation_samples,
+            off_confirmation_samples=predictor.confirmation_samples,
+            off_threshold_margin=0,
+            off_thresholds=predictor.off_thresholds,
+        )
+        model_name = "nilm-r3-six-appliance"
+        model_version = predictor.model_version
+    else:
+        predictor = StandardizingPredictor(
+            FakePredictor(settings.fake_on_appliance_types),
+            manifest,
+        )
+        state_decider = ApplianceStateDecider.from_manifest(manifest)
+        state_transition_detector = ApplianceStateTransitionDetector(
+            on_confirmation_samples=settings.appliance_on_confirmation_samples,
+            off_confirmation_samples=settings.appliance_off_confirmation_samples,
+            off_threshold_margin=settings.appliance_off_threshold_margin,
+        )
+        model_name = manifest.model_name
+    METRICS.set_model_info(model_name, model_version)
     session_factory = create_session_factory(settings)
     bootstrap_policies = PolicyRepository.from_json_file(
         settings.analysis_policy_file
@@ -143,17 +175,9 @@ def main() -> None:
     )
     handler = MeasurementHandler(
         buffer=HouseholdBuffer(settings.model_window_size),
-        # 실제 모델 Predictor로 교체해도 동일하게 Manifest의 mean/std를 적용한다.
-        predictor=StandardizingPredictor(
-            FakePredictor(settings.fake_on_appliance_types),
-            manifest,
-        ),
-        state_decider=ApplianceStateDecider.from_manifest(manifest),
-        state_transition_detector=ApplianceStateTransitionDetector(
-            on_confirmation_samples=settings.appliance_on_confirmation_samples,
-            off_confirmation_samples=settings.appliance_off_confirmation_samples,
-            off_threshold_margin=settings.appliance_off_threshold_margin,
-        ),
+        predictor=predictor,
+        state_decider=state_decider,
+        state_transition_detector=state_transition_detector,
         # 환경변수의 analysis_db 접속 정보로 SessionFactory를 만들고
         # 실제 SQLAlchemy Repository를 Handler에 주입한다.
         activity_repository=activity_repository,
@@ -165,7 +189,7 @@ def main() -> None:
         timezone_name=settings.analysis_timezone,
         data_quality_monitor=data_quality_monitor,
         analysis_run_id=settings.analysis_run_id,
-        model_version=manifest.version,
+        model_version=model_version,
         pipeline_version=settings.analysis_pipeline_version,
     )
     consumer = AnalysisConsumer(

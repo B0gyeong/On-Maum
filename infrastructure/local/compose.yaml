@@ -72,6 +72,7 @@ services:
       KAFKA_ANALYSIS_ACTIVITY_TOPIC: ${KAFKA_ANALYSIS_ACTIVITY_TOPIC:-analysis.activity.v1}
       KAFKA_ANALYSIS_DATA_QUALITY_TOPIC: ${KAFKA_ANALYSIS_DATA_QUALITY_TOPIC:-analysis.data-quality.v1}
       KAFKA_ANALYSIS_SNAPSHOT_TOPIC: ${KAFKA_ANALYSIS_SNAPSHOT_TOPIC:-analysis.snapshot.v1}
+      KAFKA_SCENE_SNAPSHOT_TOPIC: ${KAFKA_SCENE_SNAPSHOT_TOPIC:-analysis.scene.v2}
       KAFKA_ANALYSIS_DLQ_TOPIC: ${KAFKA_ANALYSIS_DLQ_TOPIC:-dlq.analysis}
       KAFKA_MONITORING_DLQ_TOPIC: ${KAFKA_MONITORING_DLQ_TOPIC:-dlq.monitoring}
       KAFKA_OUTING_EVENT_TOPIC: ${KAFKA_OUTING_EVENT_TOPIC:-monitoring.household-presence.v1}
@@ -84,6 +85,7 @@ services:
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic "$$KAFKA_OUTING_EVENT_TOPIC" --partitions "$$KAFKA_PARTITIONS" --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic "$$KAFKA_ANALYSIS_EVENT_TOPIC" --partitions "$$KAFKA_PARTITIONS" --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic "$$KAFKA_ANALYSIS_SNAPSHOT_TOPIC" --partitions "$$KAFKA_PARTITIONS" --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic "$$KAFKA_SCENE_SNAPSHOT_TOPIC" --partitions "$$KAFKA_PARTITIONS" --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic "$$KAFKA_ANALYSIS_DLQ_TOPIC" --partitions "$$KAFKA_PARTITIONS" --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic "$$KAFKA_MONITORING_DLQ_TOPIC" --partitions "$$KAFKA_PARTITIONS" --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic "$$KAFKA_ANALYSIS_ACTIVITY_TOPIC" --partitions "$$KAFKA_PARTITIONS" --replication-factor 1
@@ -92,6 +94,7 @@ services:
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --describe --topic "$$KAFKA_RAW_TOPIC"
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --describe --topic "$$KAFKA_ANALYSIS_EVENT_TOPIC"
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --describe --topic "$$KAFKA_ANALYSIS_SNAPSHOT_TOPIC"
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --describe --topic "$$KAFKA_SCENE_SNAPSHOT_TOPIC"
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --describe --topic "$$KAFKA_ANALYSIS_DLQ_TOPIC"
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --describe --topic "$$KAFKA_MONITORING_DLQ_TOPIC"
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --describe --topic "$$KAFKA_ANALYSIS_ACTIVITY_TOPIC"
@@ -195,7 +198,10 @@ services:
         max-file: "3"
 
   realtime-analysis-service:
-    build: ../../ai/realtime-analysis-service
+    build:
+      context: ../../ai
+      dockerfile: deployment/Dockerfile
+      target: local-inference
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
@@ -216,6 +222,7 @@ services:
       KAFKA_DLQ_TOPIC: ${KAFKA_ANALYSIS_DLQ_TOPIC:-dlq.analysis}
       KAFKA_ANALYSIS_EVENT_TOPIC: ${KAFKA_ANALYSIS_EVENT_TOPIC:-analysis.event.v1}
       KAFKA_ANALYSIS_SNAPSHOT_TOPIC: ${KAFKA_ANALYSIS_SNAPSHOT_TOPIC:-analysis.snapshot.v1}
+      KAFKA_SCENE_SNAPSHOT_TOPIC: ${KAFKA_SCENE_SNAPSHOT_TOPIC:-analysis.scene.v2}
       KAFKA_ANALYSIS_ACTIVITY_TOPIC: ${KAFKA_ANALYSIS_ACTIVITY_TOPIC:-analysis.activity.v1}
       KAFKA_ANALYSIS_DATA_QUALITY_TOPIC: ${KAFKA_ANALYSIS_DATA_QUALITY_TOPIC:-analysis.data-quality.v1}
       KAFKA_OUTING_EVENT_TOPIC: ${KAFKA_OUTING_EVENT_TOPIC:-monitoring.household-presence.v1}
@@ -229,7 +236,14 @@ services:
       DATABASE_NAME: analysis_db
       DATABASE_USER: ${POSTGRES_USER:?POSTGRES_USER required}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
-      MODEL_WINDOW_SIZE: ${ANALYSIS_MODEL_WINDOW_SIZE:-299}
+      MODEL_BACKEND: ${ANALYSIS_MODEL_BACKEND:-real}
+      MODEL_ASSET_ROOT: /assets
+      MODEL_WINDOW_SIZE: ${ANALYSIS_MODEL_WINDOW_SIZE:-255}
+      MODEL_APPLIANCE: ${ANALYSIS_MODEL_APPLIANCE:-kettle}
+      MODEL_HOUSEHOLD_ID: ${ANALYSIS_MODEL_HOUSEHOLD_ID:-}
+      MODEL_DEVICE: ${ANALYSIS_MODEL_DEVICE:-cpu}
+      MODEL_DTYPE: ${ANALYSIS_MODEL_DTYPE:-float32}
+      MODEL_THREADS: ${ANALYSIS_MODEL_THREADS:-1}
       MODEL_MANIFEST_FILE: config/model_manifest.json
       FAKE_ON_APPLIANCES: ${ANALYSIS_FAKE_ON_APPLIANCES:-}
       BASELINE_FILE: config/baselines.json

@@ -710,6 +710,31 @@ TURNED_OFF → 열린 세션의 ended_at 갱신
 세션 INSERT와 `event_count` 증가는 하나의 DB 트랜잭션으로 처리하며, 동일한 세션 시작이
 재처리되면 기존 세션을 사용해 `event_count`가 중복 증가하지 않도록 합니다.
 
+## 실제 모델 backend
+
+배포용 `realtime-analysis-service`는 `MODEL_BACKEND=real`로 실행하며 저장소에 포함된
+가전별 실제 체크포인트 6개를 로드합니다. 입력은 기존 `power.raw.v1`, 출력은 기존
+`analysis.snapshot.v1` 계약을 유지합니다. 모델이 요구하는 입력 창은 255초입니다.
+
+```env
+MODEL_BACKEND=real
+MODEL_ASSET_ROOT=/assets
+MODEL_WINDOW_SIZE=255
+MODEL_DEVICE=cpu
+MODEL_DTYPE=float32
+MODEL_THREADS=1
+```
+
+실제 모델은 자체 정규화와 가전별 ON/OFF threshold를 사용하므로
+`StandardizingPredictor`나 임시 `config/model_manifest.json` threshold를 거치지 않습니다.
+체크포인트 로딩 또는 추론 실패 시 FakePredictor로 대체하지 않습니다.
+
+`MODEL_BACKEND=selected_scene`은 고정된 검수 장면 하나와 가전 하나를 재현하는 별도
+모드입니다. 전용 입력·출력 계약은 [실제 모델 문서](docs/real-model.md)를 참고합니다.
+
+현재 6개 모델은 서로 다른 선택 장면에서 각각 검증됐습니다. 실시간 서버가 6개 결과를
+합칠 수 있다는 사실만으로 임의 가구에 대한 동시 추론 정확도가 보장되지는 않습니다.
+
 `FAKE_ON_APPLIANCES`에 쉼표로 가전명을 지정하면 FakePredictor가 해당 가전을 ON으로
 간주할 수 있도록 확률 `1.0`을 반환하고, 나머지는 `0.0`을 반환합니다. 최종 ON/OFF는
 `config/model_manifest.json`의 가전별 threshold를 적용해 판정합니다.

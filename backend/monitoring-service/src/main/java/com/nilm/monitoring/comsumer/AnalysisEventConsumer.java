@@ -25,15 +25,21 @@ public class AnalysisEventConsumer {
         );
 
         log.info(
-                "분석 이벤트 수신: eventId={}, householdId={}, score={}, partition={}, offset={}",
+                "분석 이벤트 수신: eventId={}, householdId={}, eventType={}, applianceType={}, "
+                        + "occurredAt={}, partition={}, offset={}",
                 event.eventId(),
                 event.householdId(),
-                event.score(),
+                event.eventType(),
+                event.applianceType(),
+                event.occurredAt(),
                 record.partition(),
                 record.offset()
         );
 
         // 이후 이벤트 저장 서비스 호출 위치
-         analysisEventService.handle(event);
+        analysisEventService.handle(event);
+
+        log.info("분석 이벤트 처리 완료: eventId={}, householdId={}",
+                event.eventId(), event.householdId());
     }
 }

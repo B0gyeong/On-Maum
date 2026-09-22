@@ -8,6 +8,8 @@ branch_labels = depends_on = None
 
 
 def upgrade():
+    if "selected_scene_evidence" in sa.inspect(op.get_bind()).get_table_names():
+        return
     op.create_table("selected_scene_evidence",
         sa.Column("household_id", sa.String(50), primary_key=True),
         sa.Column("run_id", sa.String(100), primary_key=True),
@@ -19,4 +21,5 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_table("selected_scene_evidence")
+    if "selected_scene_evidence" in sa.inspect(op.get_bind()).get_table_names():
+        op.drop_table("selected_scene_evidence")

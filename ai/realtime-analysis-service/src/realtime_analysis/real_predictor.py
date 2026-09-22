@@ -7,7 +7,9 @@ import json
 from pathlib import Path
 
 from realtime_analysis.buffer import FeatureRow
+from realtime_analysis.predictor import APPLIANCE_ORDER
 from realtime_analysis.schemas import AppliancePrediction
+from realtime_analysis.selected_scene import float32
 
 MODEL_DIRECTORY = Path(__file__).with_name("real_models")
 
@@ -19,6 +21,12 @@ def load_profile(appliance: str) -> dict:
         if profile["appliance_type"] == appliance.lower():
             return profile
     raise ValueError(f"No selected-scene profile for {appliance!r}")
+
+
+def load_profiles() -> list[dict]:
+    """Return profiles in the public six-appliance contract order."""
+
+    return [load_profile(appliance) for appliance in APPLIANCE_ORDER]
 
 
 def verified_asset(root: Path, relative: str, sha256: str) -> Path:
@@ -113,3 +121,78 @@ class SelectedScenePredictor:
             probability = torch.sigmoid(logits.float()).item()
         return [AppliancePrediction(appliance_type=self.profile["appliance_type"].upper(),
                                     probability=probability)]
+
+
+class RealtimeModelPredictor:
+    """Run all reviewed appliance checkpoints for the realtime contract.
+
+    Each checkpoint remains an independent, stateless one-target model. This
+    adapter only combines their six probabilities in ``APPLIANCE_ORDER``; it
+    never replaces a failed checkpoint with fake output.
+    """
+
+    window_size = 255
+
+    def __init__(self, asset_root: str | Path, *, device: str = "cpu",
+                 dtype: str = "float32") -> None:
+        self._predictors = tuple(
+            SelectedScenePredictor(
+                asset_root,
+                appliance,
+                device=device,
+                dtype=dtype,
+            )
+            for appliance in APPLIANCE_ORDER
+        )
+        actual_order = tuple(
+            predictor.profile["appliance_type"].upper()
+            for predictor in self._predictors
+        )
+        if actual_order != APPLIANCE_ORDER:
+            raise ValueError("Real model profile order does not match service contract")
+
+        window_sizes = {
+            int(predictor.profile["fixed_window_steps"])
+            for predictor in self._predictors
+        }
+        if window_sizes != {self.window_size}:
+            raise ValueError(f"Real model window mismatch: {sorted(window_sizes)}")
+
+        confirmations = {
+            int(predictor.profile["threshold"]["confirm"])
+            for predictor in self._predictors
+        }
+        if len(confirmations) != 1:
+            raise ValueError(
+                "Realtime pipeline requires one shared confirmation count"
+            )
+        self.confirmation_samples = confirmations.pop()
+        self.on_thresholds = {
+            predictor.profile["appliance_type"].upper(): float32(
+                predictor.profile["threshold"]["on"]
+            )
+            for predictor in self._predictors
+        }
+        self.off_thresholds = {
+            predictor.profile["appliance_type"].upper(): float32(
+                predictor.profile["threshold"]["off"]
+            )
+            for predictor in self._predictors
+        }
+        version_material = ":".join(
+            predictor.profile["checkpoint_sha256"]
+            for predictor in self._predictors
+        ).encode("ascii")
+        self.model_version = (
+            f"nilm-r3-{hashlib.sha256(version_material).hexdigest()[:12]}"
+        )
+
+    def predict(self, window: Sequence[FeatureRow]) -> list[AppliancePrediction]:
+        if len(window) != self.window_size:
+            raise ValueError(
+                f"Expected {self.window_size} realtime model input rows"
+            )
+        return [
+            predictor.predict(window)[0]
+            for predictor in self._predictors
+        ]

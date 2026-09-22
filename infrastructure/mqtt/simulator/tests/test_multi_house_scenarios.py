@@ -961,23 +961,28 @@ class TestWebUiBehavior(unittest.TestCase):
         html_path = os.path.join(SIMULATOR_DIR, "waveform_viewer.html")
         with open(html_path, "r", encoding="utf-8") as f:
             self.html_content = f.read()
+        assets_dir = os.path.join(SIMULATOR_DIR, "assets")
+        with open(os.path.join(assets_dir, "controls.js"), "r", encoding="utf-8") as f:
+            self.controls_js = f.read()
+        with open(os.path.join(assets_dir, "households.js"), "r", encoding="utf-8") as f:
+            self.households_js = f.read()
 
     def test_no_local_fallback_on_api_failure(self):
         """다중 시작 API 실패 시 브라우저가 로컬 모드로 자동 폴백하지 않는지 검증 (규칙 4)"""
-        self.assertIn("startMultiSimulation", self.html_content)
-        fn_start = self.html_content.find("async function startMultiSimulation")
-        fn_end = self.html_content.find("function startPeakDemo", fn_start)
-        fn_body = self.html_content[fn_start:fn_end]
+        self.assertIn("startMultiSimulation", self.controls_js)
+        fn_start = self.controls_js.find("async function startMultiSimulation")
+        fn_end = self.controls_js.find("function startPeakDemo", fn_start)
+        fn_body = self.controls_js[fn_start:fn_end]
 
         self.assertNotIn("startLocalSimulation", fn_body, "다중 시작 API 실패 시 로컬 모드로 폴백하면 안 됨")
         self.assertIn("showNoticeError(", fn_body, "API 실패 시 사용자에게 오류 알림을 표시해야 함")
 
     def test_observed_house_dropdown_retains_completed_households(self):
         """관찰 가구 드롭다운에는 running뿐 아니라 completed 가구도 유지 (규칙 4)"""
-        self.assertIn("ensureHouseInObservedSelect", self.html_content)
+        self.assertIn("ensureHouseInObservedSelect", self.households_js)
         self.assertIn("observedHouseSelect", self.html_content)
-        self.assertIn("updateHouseholdTableRow", self.html_content)
-        self.assertIn("completed", self.html_content)
+        self.assertIn("updateHouseholdTableRow", self.households_js)
+        self.assertIn("completed", self.households_js)
 
     def test_single_start_button_and_presets(self):
         """실제 실행 버튼은 '설정한 가구 실행' 하나로 통일, 기존 버튼은 프리셋 (규칙 4)"""

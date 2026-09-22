@@ -17,6 +17,7 @@ NILM 스마트홈 시뮬레이터 E2E 시나리오 엔진 5A REST API 단위/통
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 import unittest
@@ -110,6 +111,24 @@ class TestE2EApi(unittest.TestCase):
             except Exception:
                 content = {"raw": err.read().decode("utf-8")}
             return status, content
+
+    def test_viewer_assets_are_served(self):
+        """HTML이 참조하는 CSS/JS가 HTTP로 제공되는지 확인한다."""
+        base = f"http://127.0.0.1:{self.port}"
+        with urllib.request.urlopen(base + "/waveform_viewer.html") as response:
+            html = response.read().decode("utf-8")
+        asset_urls = re.findall(r'(?:href|src)="(assets/[a-z0-9_.]+)"', html)
+        self.assertEqual(len(asset_urls), 13)
+        for asset_url in asset_urls:
+            with self.subTest(asset=asset_url):
+                with urllib.request.urlopen(base + "/" + asset_url) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertTrue(response.read())
+                    expected_type = "text/css" if asset_url.endswith(".css") else "text/javascript"
+                    self.assertIn(expected_type, response.headers["Content-Type"])
+        with self.assertRaises(urllib.error.HTTPError) as unknown:
+            urllib.request.urlopen(base + "/assets/unknown.js")
+        self.assertEqual(unknown.exception.code, 404)
 
     def test_accelerated_speed_omitted_resolves_to_safe_auto_speed(self):
         """POST /api/e2e/runs: ACCELERATED에서 speed 생략 시 가구 수 기반 안전 배속 자동 산출"""

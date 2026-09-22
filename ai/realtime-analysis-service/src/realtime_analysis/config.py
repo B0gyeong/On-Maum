@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     database_password: str = "change-me-local"
 
     model_window_size: int = Field(default=299, ge=1)
-    model_backend: Literal["fake", "selected_scene"] = "fake"
+    model_backend: Literal["fake", "real", "selected_scene"] = "fake"
     model_asset_root: str = ""
     model_household_id: str | None = Field(default=None, min_length=1, max_length=50)
     scene_events_enabled: bool = False
@@ -134,11 +134,14 @@ class Settings(BaseSettings):
     @field_validator(
         "kafka_group_instance_id",
         "kafka_outing_group_instance_id",
+        "model_household_id",
+        "scene_test_household_id",
+        "scene_risk_threshold_seconds",
         mode="before",
     )
     @classmethod
-    def empty_group_instance_id_is_disabled(cls, value: object) -> object:
-        """Treat blank environment values as disabled static membership."""
+    def blank_optional_string_is_disabled(cls, value: object) -> object:
+        """Treat blank optional environment values as disabled."""
 
         if isinstance(value, str):
             stripped = value.strip()
@@ -147,12 +150,20 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def selected_scene_requires_isolated_configuration(self) -> "Settings":
+        if self.model_backend in {"real", "selected_scene"} and not self.model_asset_root:
+            raise ValueError(
+                "Real model backends require MODEL_ASSET_ROOT"
+            )
+        if self.model_backend == "real" and self.model_window_size != 255:
+            raise ValueError(
+                "Real model backend requires MODEL_WINDOW_SIZE=255"
+            )
         if self.scene_risk_threshold_seconds is not None:
             if not self.scene_events_enabled or not self.scene_test_household_id or self.scene_test_household_id != self.model_household_id:
                 raise ValueError('Scene risk requires enabled events and an explicit matching test household')
         if self.model_backend == "selected_scene":
-            if not self.model_asset_root or self.analysis_run_id == "realtime-v1":
-                raise ValueError("Selected scene requires MODEL_ASSET_ROOT and a dedicated ANALYSIS_RUN_ID")
+            if self.analysis_run_id == "realtime-v1":
+                raise ValueError("Selected scene requires a dedicated ANALYSIS_RUN_ID")
             if self.kafka_input_topic == "power.raw.v1" or self.kafka_group_id == "realtime-analysis-service-v1":
                 raise ValueError("Selected scene requires dedicated input topic and consumer group")
             if self.kafka_scene_snapshot_topic == self.kafka_analysis_snapshot_topic:

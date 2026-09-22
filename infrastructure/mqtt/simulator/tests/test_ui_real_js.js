@@ -1,7 +1,7 @@
 /**
  * test_ui_real_js.js
  * 
- * 운영 파일(waveform_viewer.html)의 실제 JavaScript 코드를 추출하여 Node.js 환경에서 직접 실행 및 검증합니다.
+ * 운영 HTML에서 참조하는 JavaScript 파일을 순서대로 Node.js 환경에서 직접 실행 및 검증합니다.
  * 운영 코드를 테스트 파일에 복제하지 않고 fs.readFileSync로 읽어 vm.runInContext로 실행합니다.
  */
 
@@ -10,16 +10,16 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
-// 1. 운영 HTML 파일 읽기 및 <script> 추출
+// 1. 운영 HTML 파일에서 로컬 <script src> 목록 추출
 const htmlPath = path.join(__dirname, '..', 'waveform_viewer.html');
 const htmlContent = fs.readFileSync(htmlPath, 'utf-8');
-
-const scriptMatch = htmlContent.match(/<script>([\s\S]*?)<\/script>/);
-if (!scriptMatch) {
-  console.error("오류: waveform_viewer.html에서 <script> 태그를 찾을 수 없습니다.");
+const scriptPaths = [...htmlContent.matchAll(/<script src="(assets\/[a-z0-9_]+\.js)"><\/script>/g)]
+  .map(match => path.join(__dirname, '..', match[1]));
+if (scriptPaths.length === 0) {
+  console.error("오류: waveform_viewer.html에서 로컬 JavaScript 파일을 찾을 수 없습니다.");
   process.exit(1);
 }
-const scriptCode = scriptMatch[1];
+const scriptCode = scriptPaths.map(scriptPath => fs.readFileSync(scriptPath, 'utf-8')).join('\n');
 
 // 2. Mock DOM 및 브라우저 환경 구축
 function createMockElement(id = '', tagName = 'div') {
@@ -78,7 +78,7 @@ function createMockElement(id = '', tagName = 'div') {
       }
       return collection;
     },
-    style: {},
+    style: { setProperty(name, value) { this[name] = value; } },
     attributes: {},
     setAttribute(name, val) { this.attributes[name] = String(val); },
     getAttribute(name) { return this.attributes[name]; },
@@ -322,7 +322,9 @@ const context = vm.createContext(sandbox);
 
 // 3. 실제 운영 스크립트 실행
 try {
-  vm.runInContext(scriptCode, context);
+  scriptPaths.forEach(scriptPath => {
+    vm.runInContext(fs.readFileSync(scriptPath, 'utf-8'), context, { filename: scriptPath });
+  });
   console.log("✔ 운영 JavaScript 코드 vm 로드 및 초기화 성공");
 } catch (err) {
   console.error("✘ 운영 JavaScript 코드 실행 실패:", err);
@@ -452,8 +454,8 @@ async function runTests() {
 
   // Test 6: 운영 HTML 코드 apparentS 키 완전 통일 및 tick() 실행 TypeError 방지 검증
   console.log("\n[Test 6] apparentS 키 완전 통일 및 tick() 실행 검증");
-  assert.ok(!htmlContent.includes("historyData.apparentP"), "HTML 내에 historyData.apparentP가 남아있지 않아야 합니다.");
-  assert.ok(!htmlContent.includes("hist.apparentP"), "HTML 내에 hist.apparentP가 남아있지 않아야 합니다.");
+  assert.ok(!scriptCode.includes("historyData.apparentP"), "JavaScript에 historyData.apparentP가 남아있지 않아야 합니다.");
+  assert.ok(!scriptCode.includes("hist.apparentP"), "JavaScript에 hist.apparentP가 남아있지 않아야 합니다.");
 
   // tick() 직접 호출 검증
   const tickFn = getGlobal('tick');
@@ -785,8 +787,8 @@ async function runTests() {
   // Test 15: 브라우저 내부 normal_routine 표시 시각 계산식 오프바이원 수정 검증
   console.log("\n[Test 15] 브라우저 내부 normal_routine tick() 가상 시각 계산식 오프바이원 수정 검증");
   assert.ok(
-    htmlContent.includes("8 * 3600 + 4 * 60 + 58 + (currentSec - 1)"),
-    "waveform_viewer.html의 normal_routine 가상 시각 계산식이 (currentSec - 1)로 수정되어 있어야 합니다."
+    scriptCode.includes("8 * 3600 + 4 * 60 + 58 + (currentSec - 1)"),
+    "운영 JavaScript의 normal_routine 가상 시각 계산식이 (currentSec - 1)로 수정되어 있어야 합니다."
   );
 
   function calcVirtualKstTime(sec) {
@@ -2162,6 +2164,9 @@ async function runTests() {
     assert.strictEqual(msgAreaEl.textContent, "", "렌더링 중 예외가 발생하지 않아 오류 배너에 문구가 없어야 합니다.");
     console.log("✔ Test 45 통과: E2E 가구 표 렌더링, 플레이스홀더 제거, 멱등 유지 및 오류 없음 검증 완료");
   }
+
+
+  await require("./test_powerflow_ui")({ getGlobal, setGlobal, getOrCreateElement, sandbox, htmlContent });
 
   console.log("\n==========================================");
   console.log("🎉 모든 프런트엔드 실제 JavaScript 테스트 통과!");

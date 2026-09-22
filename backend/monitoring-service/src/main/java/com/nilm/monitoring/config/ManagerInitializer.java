@@ -49,7 +49,7 @@ public class ManagerInitializer implements SmartInitializingSingleton {
         requirePassword();
 
         for (int index = 1; index <= ACCOUNT_COUNT; index++) {
-            String name = String.format("테스트 담당자 %02d", index);
+            String name = String.format("담당자 %02d", index);
             String email = String.format("manager%02d@nilm.local", index);
             String phone = String.format("0102%07d", index);
             TestDataApiClient.SeedAccount account = api.ensureUser(

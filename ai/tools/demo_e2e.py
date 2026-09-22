@@ -37,7 +37,7 @@ def main():
         name = p['appliance_type']
         run = f'r3-{name}-{args.tag}'
         household = f'r3-{name}'
-        env = {**os.environ, 'R3_APPLIANCE': name, 'R3_RUN_ID': run}
+        env = {**os.environ, 'R3_APPLIANCE': name, 'R3_RUN_ID': run, 'R3_HOUSEHOLD_ID': household}
         docker('up', '-d', '--no-build', '--no-deps', '--force-recreate', 'analysis', env=env)
         # Kafka retains input; startup and processing are verified by API, not a sleep.
         subprocess.run([sys.executable, '-m', 'realtime_analysis.scene_replay', 'publish',
