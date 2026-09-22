@@ -6,6 +6,7 @@ import argparse
 from datetime import date, datetime, timedelta, timezone
 import json
 import logging
+import math
 import signal
 import threading
 
@@ -16,12 +17,69 @@ from power_silver.spark import build_session
 from power_silver.storage import create_storage
 
 from gold_profile.config import get_settings
-from gold_profile.daily import SparkDailyStages, run_daily_pipeline
+from gold_profile.daily import (
+    RUN_INPUT_INCOMPLETE,
+    RUN_PUBLISH_PENDING,
+    STATUS_FAILED,
+    STATUS_SKIPPED,
+    STATUS_SUCCEEDED,
+    SparkDailyStages,
+    run_daily_pipeline,
+)
 from gold_profile.delivery import GoldProfilePublisher, drain_outbox
 from gold_profile.input_snapshot import build_profile_snapshot, window_dates
 from gold_profile.job import (
     DATASET_ROUTINE_BASELINE, JOB_NAME, config_version_of, run_gold_profile,
 )
+
+
+EXIT_SUCCEEDED = 0
+EXIT_FAILED = 1
+EXIT_INVALID_ARGUMENT = 2
+EXIT_INPUT_INCOMPLETE = 10
+EXIT_SKIPPED = 11
+EXIT_PUBLISH_PENDING = 12
+
+
+def _iso_date(value: str) -> str:
+    try:
+        date.fromisoformat(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be an ISO date (YYYY-MM-DD)") from error
+    return value
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
+
+
+def _non_negative_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed < 0:
+        raise argparse.ArgumentTypeError("must be at least 0")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
+    return parsed
+
+
+def daily_exit_code(status: str) -> int:
+    """Map the daily result contract to stable scheduler-facing exit codes."""
+
+    return {
+        STATUS_SUCCEEDED: EXIT_SUCCEEDED,
+        RUN_INPUT_INCOMPLETE: EXIT_INPUT_INCOMPLETE,
+        STATUS_SKIPPED: EXIT_SKIPPED,
+        RUN_PUBLISH_PENDING: EXIT_PUBLISH_PENDING,
+        STATUS_FAILED: EXIT_FAILED,
+    }.get(status, EXIT_FAILED)
 
 
 def default_as_of_date(settings, now: datetime | None = None) -> date:
@@ -33,18 +91,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="gold-profile", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     run = commands.add_parser("run", help="build one as-of-date profile")
-    run.add_argument("--as-of")
+    run.add_argument("--as-of", type=_iso_date)
     run.add_argument("--force", action="store_true")
     backfill = commands.add_parser("backfill", help="build an inclusive as-of range")
-    backfill.add_argument("--from", dest="start", required=True)
-    backfill.add_argument("--to", dest="end", required=True)
+    backfill.add_argument("--from", dest="start", type=_iso_date, required=True)
+    backfill.add_argument("--to", dest="end", type=_iso_date, required=True)
     backfill.add_argument("--force", action="store_true")
     status = commands.add_parser("status", help="show the active shadow profile")
-    status.add_argument("--as-of")
+    status.add_argument("--as-of", type=_iso_date)
     dirty = commands.add_parser("dirty", help="check whether active inputs changed")
-    dirty.add_argument("--as-of")
-    dirty.add_argument("--from", dest="start")
-    dirty.add_argument("--to", dest="end")
+    dirty.add_argument("--as-of", type=_iso_date)
+    dirty.add_argument("--from", dest="start", type=_iso_date)
+    dirty.add_argument("--to", dest="end", type=_iso_date)
 
     publish = commands.add_parser("publish", help="publish pending outbox rows")
     publish.add_argument(
@@ -52,18 +110,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="keep draining until stopped; this is how the publisher service runs",
     )
     publish.add_argument(
-        "--interval", type=float,
+        "--interval", type=_positive_float,
         help="seconds between sweeps when looping (default: the retry interval)",
     )
 
     daily = commands.add_parser(
         "daily", help="run one business day end to end: silver, usage, gold, publish"
     )
-    daily.add_argument("--as-of")
+    daily.add_argument("--as-of", type=_iso_date)
     daily.add_argument(
-        "--attempts", type=int, default=3, help="retries per stage (default: 3)"
+        "--attempts", type=_positive_int, default=3,
+        help="retries per stage (default: 3)",
     )
-    daily.add_argument("--retry-seconds", type=float, default=30.0)
+    daily.add_argument(
+        "--retry-seconds", type=_non_negative_float, default=30.0
+    )
     daily.add_argument(
         "--no-align", action="store_true",
         help="skip rebuilding window dates that sit on an older session snapshot",
@@ -107,9 +168,10 @@ def _daily(settings, session_factory, args) -> int:
     as_of_date = (
         date.fromisoformat(args.as_of) if args.as_of else default_as_of_date(settings)
     )
-    storage = create_storage(settings)
-    spark = build_session(settings)
+    spark = None
     try:
+        storage = create_storage(settings)
+        spark = build_session(settings)
         stages = SparkDailyStages(
             settings,
             storage=storage,
@@ -126,10 +188,22 @@ def _daily(settings, session_factory, args) -> int:
             align_window=not args.no_align,
             publish=not args.no_publish,
         )
+    except Exception as error:  # initialization failures also need a machine-readable result
+        logging.exception("daily pipeline initialization failed")
+        report = {
+            "as_of_date": as_of_date.isoformat(),
+            "status": STATUS_FAILED,
+            "ok": False,
+            "stages": [],
+            "error": f"{type(error).__name__}: {error}",
+        }
     finally:
-        spark.stop()
+        if spark is not None:
+            spark.stop()
+    exit_code = daily_exit_code(report["status"])
+    report = {**report, "exit_code": exit_code}
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    return 0 if report["ok"] else 1
+    return exit_code
 
 
 def main(argv: list[str] | None = None) -> int:

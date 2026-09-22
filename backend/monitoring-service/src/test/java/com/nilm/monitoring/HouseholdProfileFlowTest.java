@@ -117,6 +117,30 @@ class HouseholdProfileFlowTest {
                 30600, 33000, 27000, 33000, "READY", true);
     }
 
+    private HouseholdProfileMessage deliveredAs(
+            HouseholdProfileMessage message,
+            String deliveryMode
+    ) {
+        return new HouseholdProfileMessage(
+                message.schemaVersion(),
+                message.householdId(),
+                message.profileVersion(),
+                message.profileRevision(),
+                deliveryMode,
+                message.asOfDate(),
+                message.windowStartDate(),
+                message.windowEndDate(),
+                message.effectiveFrom(),
+                message.publishedAt(),
+                message.inputSnapshotId(),
+                message.ruleVersion(),
+                message.statisticRuleVersion(),
+                message.qualityStatus(),
+                message.routineBaselines(),
+                message.statistics()
+        );
+    }
+
     private HouseholdProfileMessage.Statistic statistic(
             String metricName,
             String applianceType,
@@ -143,6 +167,13 @@ class HouseholdProfileFlowTest {
         return jdbc.queryForObject(
                 "select profile_version from household_profiles where status = 'ACTIVE'",
                 String.class);
+    }
+
+    private String activeVersion(String householdId) {
+        return jdbc.queryForObject(
+                "select profile_version from household_profiles "
+                        + "where household_id = ? and status = 'ACTIVE'",
+                String.class, householdId);
     }
 
     private long stateVersion() {
@@ -183,6 +214,33 @@ class HouseholdProfileFlowTest {
         assertThat(count("household_profile_statistics")).isEqualTo(2);
         // 같은 버전을 다시 받으면 반영도 평가도 일어나지 않는다.
         assertThat(stateVersion()).isEqualTo(3L);
+        assertThat(profileUpdatedEvents()).isZero();
+    }
+
+    @Test
+    void shadowThenActiveUsesANewVersionAndIsNotBlockedAsDuplicate() {
+        service.receive(deliveredAs(
+                profile("H001", "v1", TODAY.minusDays(1), "READY"), "SHADOW"));
+        applicationEvents.clear();
+
+        service.receive(profile("H001", "v2", TODAY.minusDays(1), "READY"));
+
+        assertThat(statusOf("v1")).isEqualTo("SHADOW");
+        assertThat(statusOf("v2")).isEqualTo("ACTIVE");
+        assertThat(activeVersion()).isEqualTo("v2");
+        assertThat(profileUpdatedEvents()).isEqualTo(1);
+    }
+
+    @Test
+    void lateShadowNeverReplacesTheActiveProfile() {
+        service.receive(profile("H001", "v2", TODAY.minusDays(1), "READY"));
+        applicationEvents.clear();
+
+        service.receive(deliveredAs(
+                profile("H001", "v3", TODAY.minusDays(1), "READY"), "SHADOW"));
+
+        assertThat(statusOf("v3")).isEqualTo("SHADOW");
+        assertThat(activeVersion()).isEqualTo("v2");
         assertThat(profileUpdatedEvents()).isZero();
     }
 
@@ -294,6 +352,20 @@ class HouseholdProfileFlowTest {
         assertThatCode(() -> service.receive(broken)).doesNotThrowAnyException();
 
         assertThat(count("household_profiles")).isZero();
+    }
+
+    @Test
+    void profilesForDifferentHouseholdsAreOrderedIndependently() {
+        jdbc.update("""
+                insert into subjects(household_id, auth_sub, birth_date, name, phone, address)
+                values ('H002', 'test-subject-4', DATE '1955-01-01', 'test2', '010', 'test2')
+                """);
+
+        service.receive(profile("H001", "v2", TODAY.minusDays(1), "READY"));
+        service.receive(profile("H002", "v1", TODAY.minusDays(1), "READY"));
+
+        assertThat(activeVersion("H001")).isEqualTo("v2");
+        assertThat(activeVersion("H002")).isEqualTo("v1");
     }
 
     // --- 선택 ---------------------------------------------------------------

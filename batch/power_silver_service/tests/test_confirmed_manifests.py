@@ -5,7 +5,12 @@ from __future__ import annotations
 import json
 from uuid import uuid4
 
-from power_silver.analysis_job import _confirmed_files
+import pytest
+
+from power_silver.analysis_job import (
+    _confirmed_files,
+    select_analysis_input_snapshot,
+)
 
 
 def put_manifest(storage, path: str, files: list[str]) -> None:
@@ -62,3 +67,53 @@ def test_unconfirmed_leftovers_are_not_read_as_manifests(lake, settings):
 
     assert files == []
     assert count == 0
+
+
+def test_selected_analysis_input_does_not_include_a_later_manifest(lake, settings):
+    receipt = f"{settings.silver_base}/receipt/part-0.parquet"
+    session = f"{settings.silver_base}/session/part-0.parquet"
+    put_manifest(
+        lake,
+        f"{settings.receipt_manifest_base}/date=2026-09-19/batch_id=a/manifest.json",
+        [receipt],
+    )
+    put_manifest(
+        lake,
+        f"{settings.session_manifest_base}/date=2026-09-19/manifest-a.json",
+        [session],
+    )
+    selected = select_analysis_input_snapshot(settings, storage=lake)
+
+    later = f"{settings.silver_base}/session/part-1.parquet"
+    put_manifest(
+        lake,
+        f"{settings.session_manifest_base}/date=2026-09-20/manifest-b.json",
+        [later],
+    )
+
+    assert [item.path for item in selected.session_files] == [session]
+    selected.validate(lake)
+    next_run = select_analysis_input_snapshot(settings, storage=lake)
+    assert [item.path for item in next_run.session_files] == [session, later]
+    assert next_run.snapshot_id != selected.snapshot_id
+
+
+def test_selected_analysis_input_rejects_in_place_file_mutation(lake, settings):
+    receipt = f"{settings.silver_base}/receipt/part-0.parquet"
+    session = f"{settings.silver_base}/session/part-0.parquet"
+    put_manifest(
+        lake,
+        f"{settings.receipt_manifest_base}/date=2026-09-19/batch_id=a/manifest.json",
+        [receipt],
+    )
+    put_manifest(
+        lake,
+        f"{settings.session_manifest_base}/date=2026-09-19/manifest-a.json",
+        [session],
+    )
+    selected = select_analysis_input_snapshot(settings, storage=lake)
+
+    lake.write_bytes(session, b"changed-confirmed-file")
+
+    with pytest.raises(RuntimeError, match="changed after selection"):
+        selected.validate(lake)

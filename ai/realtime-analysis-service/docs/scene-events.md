@@ -7,7 +7,7 @@ AI 세션 저장과 snapshot/window 저장, outbox INSERT는 같은 DB 트랜잭
 따라서 downstream도 event_id/revision 멱등성이 필요하다(exactly-once 전달을 주장하지 않는다).
 
 세션은 `selected_scene_usage`, 재시작 상태는 `selected_scene_projection`, 발행 대기는
-`selected_scene_outbox`에 저장한다. Alembic `20260921_16`이 추가한다.
+`selected_scene_outbox`에 저장한다. Alembic `20260921_18`이 추가한다.
 ready 목표 가전만 세션을 만들며 SYNC ON은 start_known=false다. UNKNOWN은 GAP 중단,
 고정 panel의 마지막 입력에서 아직 ON이면 EOF 중단이다. 둘 다 ended_at=null이고 OFF를 만들지 않는다.
 정상 worker 재시작은 세션을 취소하지 않는다. 영구 중단은 worker를 먼저 멈춘 후 같은 설정으로

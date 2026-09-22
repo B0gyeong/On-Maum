@@ -1,9 +1,15 @@
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 
 from power_silver.analysis_coverage import build_analysis_coverage
-from power_silver.appliance_usage import session_daily_slices, summarize_daily_slices
+from power_silver.analysis_job import SESSION_INPUT_SCHEMA
+from power_silver.appliance_usage import (
+    restore_latest_sessions,
+    session_daily_slices,
+    summarize_daily_slices,
+)
 
 
 pytestmark = pytest.mark.spark
@@ -72,3 +78,24 @@ def test_nearby_sessions_merge_before_ten_second_rule(spark) -> None:
     assert row.usage_start_count == 1
     assert row.usage_duration_us == 12_000_000
     assert row.rejected_short_use_count == 0
+
+
+def test_latest_revision_and_delete_restore_the_past_session_state(spark) -> None:
+    start = datetime(2026, 9, 18, 15, 0, tzinfo=timezone.utc)
+    changes = spark.createDataFrame(
+        [
+            ("updated", 1, False, start, "a", "H001", "KETTLE", date(2026, 9, 19), start, start + timedelta(seconds=10), Decimal("0.9"), Decimal("0.5"), start, 1),
+            ("updated", 2, False, start, "a", "H001", "KETTLE", date(2026, 9, 19), start, start + timedelta(seconds=30), Decimal("0.9"), Decimal("0.5"), start, 2),
+            ("deleted", 1, False, start, "a", "H001", "KETTLE", date(2026, 9, 19), start, start + timedelta(seconds=20), Decimal("0.9"), Decimal("0.5"), start, 3),
+            ("deleted", 2, True, start, "a", "H001", "KETTLE", date(2026, 9, 19), start, start + timedelta(seconds=20), Decimal("0.9"), Decimal("0.5"), start, 4),
+        ],
+        SESSION_INPUT_SCHEMA,
+    )
+
+    restored = restore_latest_sessions(changes).collect()
+
+    assert [(row.session_id, row.session_version) for row in restored] == [
+        ("updated", 2)
+    ]
+    # Spark hands timestamps back as naive UTC (session time zone is UTC).
+    assert restored[0].ended_at.replace(tzinfo=timezone.utc) == start + timedelta(seconds=30)

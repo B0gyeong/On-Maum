@@ -456,13 +456,21 @@ services:
       BUSINESS_UTC_OFFSET_SECONDS: ${BUSINESS_UTC_OFFSET_SECONDS:-32400}
       RULE_VERSION: ${POWER_SILVER_RULE_VERSION:-power-silver-v1}
       VALID_COVERAGE_RATIO: ${ANALYSIS_OBSERVATION_VALID_COVERAGE_RATIO:-0.95}
+      FUTURE_SKEW_SECONDS: ${POWER_SILVER_FUTURE_SKEW_SECONDS:-300}
       INPUT_READY_GRACE_SECONDS: ${POWER_SILVER_INPUT_READY_GRACE_SECONDS:-1800}
       INPUT_WAIT_DEADLINE_SECONDS: ${POWER_SILVER_INPUT_WAIT_DEADLINE_SECONDS:-21600}
+      MANIFEST_SCAN_BACK_DAYS: ${POWER_SILVER_MANIFEST_SCAN_BACK_DAYS:-1}
+      ANALYSIS_RULE_VERSION: ${ANALYSIS_DAILY_RULE_VERSION:-analysis-coverage-v1}
+      QUALITY_POLICY_VERSION: ${ANALYSIS_QUALITY_POLICY_VERSION:-baseline-quality-v1}
+      ANALYSIS_MINIMUM_COVERAGE_RATIO: ${ANALYSIS_OBSERVATION_VALID_COVERAGE_RATIO:-0.95}
+      ANALYSIS_MAXIMUM_GAP_SECONDS: ${ANALYSIS_MAXIMUM_GAP_SECONDS:-120}
       SPARK_MASTER: ${POWER_SILVER_SPARK_MASTER:-}
       SPARK_SHUFFLE_PARTITIONS: ${POWER_SILVER_SPARK_SHUFFLE_PARTITIONS:-0}
       LOG_LEVEL: ${POWER_SILVER_LOG_LEVEL:-INFO}
     depends_on:
       postgres:
+        condition: service_healthy
+      realtime-analysis-service:
         condition: service_healthy
       datanode:
         condition: service_started
@@ -474,7 +482,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Versioned, shadow-only Gold baseline/statistical profiles.
+  # Versioned Gold baseline/statistical profiles; delivery defaults to SHADOW.
   # One business day end to end (silver -> usage -> gold -> publish):
   #   docker compose run --rm gold-profile gold-profile daily
   gold-profile:
@@ -492,14 +500,35 @@ services:
       HDFS_URL: http://namenode:9870
       HDFS_USER: root
       LAKE_FS_URI: ${POWER_SILVER_LAKE_FS_URI:-hdfs://namenode:9000}
+      BRONZE_BASE: ${BRONZE_BASE:-/nilm/bronze/power}
+      BRONZE_MANIFEST_BASE: ${BRONZE_MANIFEST_BASE:-/nilm/manifests/job=bronze-loader}
       SILVER_BASE: ${SILVER_BASE:-/nilm/silver}
+      QUARANTINE_BASE: ${POWER_SILVER_QUARANTINE_BASE:-/nilm/quarantine/power_silver}
+      MANIFEST_BASE: ${POWER_SILVER_MANIFEST_BASE:-/nilm/manifests/job=power-silver-daily}
+      SESSION_MANIFEST_BASE: ${SESSION_MANIFEST_BASE:-/nilm/manifests/job=session-lake-loader}
+      RECEIPT_MANIFEST_BASE: ${RECEIPT_MANIFEST_BASE:-/nilm/manifests/job=analysis-receipt-lake-loader}
+      ANALYSIS_MANIFEST_BASE: ${ANALYSIS_MANIFEST_BASE:-/nilm/manifests/job=analysis-usage-daily}
       GOLD_BASE: ${GOLD_BASE:-/nilm/gold}
+      ANALYSIS_RUN_ID: ${ANALYSIS_RUN_ID:-realtime-v1}
+      RULE_VERSION: ${POWER_SILVER_RULE_VERSION:-power-silver-v1}
+      VALID_COVERAGE_RATIO: ${ANALYSIS_OBSERVATION_VALID_COVERAGE_RATIO:-0.95}
+      FUTURE_SKEW_SECONDS: ${POWER_SILVER_FUTURE_SKEW_SECONDS:-300}
+      INPUT_READY_GRACE_SECONDS: ${POWER_SILVER_INPUT_READY_GRACE_SECONDS:-1800}
+      INPUT_WAIT_DEADLINE_SECONDS: ${POWER_SILVER_INPUT_WAIT_DEADLINE_SECONDS:-21600}
+      MANIFEST_SCAN_BACK_DAYS: ${POWER_SILVER_MANIFEST_SCAN_BACK_DAYS:-1}
+      ANALYSIS_RULE_VERSION: ${ANALYSIS_DAILY_RULE_VERSION:-analysis-coverage-v1}
+      QUALITY_POLICY_VERSION: ${ANALYSIS_QUALITY_POLICY_VERSION:-baseline-quality-v1}
+      ANALYSIS_MINIMUM_COVERAGE_RATIO: ${ANALYSIS_OBSERVATION_VALID_COVERAGE_RATIO:-0.95}
+      ANALYSIS_MAXIMUM_GAP_SECONDS: ${ANALYSIS_DAILY_MAXIMUM_GAP_SECONDS:-120}
       PROFILE_MANIFEST_BASE: ${GOLD_PROFILE_MANIFEST_BASE:-/nilm/manifests/job=gold-profile}
+      PROFILE_STAGING_BASE: ${GOLD_PROFILE_STAGING_BASE:-/nilm/gold/.staging/job=gold-profile}
       PROFILE_WINDOW_DAYS: ${GOLD_PROFILE_WINDOW_DAYS:-28}
       PROFILE_MINIMUM_SAMPLE_DAYS: ${GOLD_PROFILE_MINIMUM_SAMPLE_DAYS:-14}
       PROFILE_MINIMUM_WEEKDAY_SAMPLE_DAYS: ${GOLD_PROFILE_MINIMUM_WEEKDAY_SAMPLE_DAYS:-4}
       PROFILE_MINIMUM_DAILY_USE_PROBABILITY: ${GOLD_PROFILE_MINIMUM_DAILY_USE_PROBABILITY:-0.70}
       PROFILE_TIME_BUCKET_MINUTES: ${GOLD_PROFILE_TIME_BUCKET_MINUTES:-30}
+      PROFILE_RULE_VERSION: ${GOLD_PROFILE_RULE_VERSION:-gold-profile-v1}
+      PROFILE_STATISTIC_RULE_VERSION: ${GOLD_PROFILE_STATISTIC_RULE_VERSION:-household-statistics-v1-nearest-rank}
       # 프로필 전달. SHADOW는 아웃박스에만 적고 모니터링 운영 프로필로 반영하지 않는다.
       # 종단 검증이 끝난 뒤 ACTIVE로 올린다.
       PROFILE_DELIVERY_MODE: ${GOLD_PROFILE_DELIVERY_MODE:-SHADOW}
@@ -515,6 +544,8 @@ services:
       kafka-init:
         condition: service_completed_successfully
       postgres:
+        condition: service_healthy
+      realtime-analysis-service:
         condition: service_healthy
       datanode:
         condition: service_started
@@ -549,6 +580,8 @@ services:
       kafka-init:
         condition: service_completed_successfully
       postgres:
+        condition: service_healthy
+      realtime-analysis-service:
         condition: service_healthy
     logging:
       driver: json-file

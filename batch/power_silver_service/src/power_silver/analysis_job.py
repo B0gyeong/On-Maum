@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
 import hashlib
@@ -14,7 +15,7 @@ from pyspark.sql.types import (
     StringType, StructField, StructType, TimestampType,
 )
 
-from realtime_analysis.models import APPLIANCE_TYPES
+from realtime_analysis.models import APPLIANCE_TYPES, LakeBatchRun
 from power_silver.analysis_coverage import apply_completion_policy, build_analysis_coverage
 from power_silver.appliance_usage import (
     build_appliance_usage_daily,
@@ -70,29 +71,229 @@ def _is_confirmed_manifest(path: str) -> bool:
     return name.startswith("manifest-") and name.endswith(".json")
 
 
-def _confirmed_files(storage, manifest_base: str) -> tuple[list[str], str, int]:
+@dataclass(frozen=True)
+class ConfirmedFile:
+    path: str
+    sha256: str
+    length: int
+    modification_time: int
+
+
+@dataclass(frozen=True)
+class ConfirmedManifest:
+    path: str
+    content_sha256: str
+
+
+@dataclass(frozen=True)
+class AnalysisInputSnapshot:
+    """One immutable selection of delivered receipts and session changes.
+
+    Confirmed lake files are append-only by contract.  The captured size and
+    modification time are checked again before publication so an accidental
+    in-place rewrite cannot silently produce a result under the old snapshot id.
+    """
+
+    snapshot_id: str
+    receipt_snapshot_id: str
+    session_snapshot_id: str
+    receipt_files: tuple[ConfirmedFile, ...]
+    session_files: tuple[ConfirmedFile, ...]
+    receipt_manifests: tuple[ConfirmedManifest, ...]
+    session_manifests: tuple[ConfirmedManifest, ...]
+
+    @property
+    def session_token(self) -> str:
+        """Token embedded in the 100-character dataset config_version column."""
+
+        return self.session_snapshot_id[:32]
+
+    def validate(self, storage) -> None:
+        for manifest in (*self.receipt_manifests, *self.session_manifests):
+            actual = hashlib.sha256(storage.read_bytes(manifest.path)).hexdigest()
+            if actual != manifest.content_sha256:
+                raise RuntimeError(
+                    f"confirmed manifest changed after selection: {manifest.path}"
+                )
+        for selected in (*self.receipt_files, *self.session_files):
+            if not storage.exists(selected.path):
+                raise RuntimeError(
+                    f"confirmed manifest file is missing: {selected.path}"
+                )
+            status = storage.status(selected.path)
+            if (
+                status.length != selected.length
+                or status.modification_time != selected.modification_time
+            ):
+                raise RuntimeError(
+                    f"confirmed manifest file changed after selection: {selected.path}"
+                )
+
+    def as_dict(self) -> dict:
+        def files(items):
+            return [
+                {
+                    "path": item.path,
+                    "sha256": item.sha256,
+                    "length": item.length,
+                    "modification_time": item.modification_time,
+                }
+                for item in items
+            ]
+
+        return {
+            "snapshot_id": self.snapshot_id,
+            "receipt_snapshot_id": self.receipt_snapshot_id,
+            "session_snapshot_id": self.session_snapshot_id,
+            "session_token": self.session_token,
+            "receipt_manifests": [item.path for item in self.receipt_manifests],
+            "session_manifests": [item.path for item in self.session_manifests],
+            "receipt_files": files(self.receipt_files),
+            "session_files": files(self.session_files),
+        }
+
+
+def _confirmed_selection(storage, manifest_base: str):
     manifests = [
         item.path
         for item in storage.walk_files(manifest_base)
         if _is_confirmed_manifest(item.path)
     ]
-    entries: list[tuple[str, str]] = []
-    files: list[str] = []
+    manifest_refs: list[ConfirmedManifest] = []
+    files: dict[str, ConfirmedFile] = {}
     for path in sorted(manifests):
-        manifest = json.loads(storage.read_bytes(path))
+        raw = storage.read_bytes(path)
+        manifest_refs.append(ConfirmedManifest(path, hashlib.sha256(raw).hexdigest()))
+        manifest = json.loads(raw)
         for item in manifest.get("files", []):
             file_path = item["path"]
             if not storage.exists(file_path):
                 raise RuntimeError(f"confirmed manifest file is missing: {file_path}")
-            files.append(file_path)
-            entries.append((path, str(item.get("sha256") or "")))
+            status = storage.status(file_path)
+            selected = ConfirmedFile(
+                path=file_path,
+                sha256=str(item.get("sha256") or ""),
+                length=status.length,
+                modification_time=status.modification_time,
+            )
+            previous = files.get(file_path)
+            if previous is not None and previous.sha256 != selected.sha256:
+                raise RuntimeError(
+                    f"confirmed manifests disagree about file digest: {file_path}"
+                )
+            files[file_path] = selected
+    ordered_files = tuple(files[path] for path in sorted(files))
+    entries = {
+        "manifests": [(item.path, item.content_sha256) for item in manifest_refs],
+        "files": [
+            (item.path, item.sha256, item.length, item.modification_time)
+            for item in ordered_files
+        ],
+    }
     digest = hashlib.sha256(
         json.dumps(entries, separators=(",", ":"), ensure_ascii=False).encode()
     ).hexdigest()
-    return sorted(set(files)), digest, len(manifests)
+    return ordered_files, tuple(manifest_refs), digest
 
 
-def run_analysis_daily(settings, target_date: date, *, storage, session_factory, spark) -> dict:
+def _confirmed_files(storage, manifest_base: str) -> tuple[list[str], str, int]:
+    """Compatibility helper for callers that only need the current selection."""
+
+    files, manifests, digest = _confirmed_selection(storage, manifest_base)
+    return [item.path for item in files], digest, len(manifests)
+
+
+def select_analysis_input_snapshot(settings, *, storage) -> AnalysisInputSnapshot:
+    receipt_files, receipt_manifests, receipt_id = _confirmed_selection(
+        storage, settings.receipt_manifest_base
+    )
+    session_files, session_manifests, session_id = _confirmed_selection(
+        storage, settings.session_manifest_base
+    )
+    if not session_manifests:
+        raise RuntimeError("no confirmed session manifest; run initial-load first")
+    snapshot_id = hashlib.sha256(
+        json.dumps(
+            {"receipts": receipt_id, "sessions": session_id},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    return AnalysisInputSnapshot(
+        snapshot_id=snapshot_id,
+        receipt_snapshot_id=receipt_id,
+        session_snapshot_id=session_id,
+        receipt_files=receipt_files,
+        session_files=session_files,
+        receipt_manifests=receipt_manifests,
+        session_manifests=session_manifests,
+    )
+
+
+ANALYSIS_DATASETS = (
+    DATASET_ANALYSIS_COVERAGE,
+    DATASET_SESSION_SLICES,
+    DATASET_APPLIANCE_USAGE_DAILY,
+)
+
+
+def analysis_policy_digest(settings) -> str:
+    """Settings that change the output but do not fit in ``config_version``.
+
+    ``config_version`` carries the receipt and session snapshot tokens and is
+    limited to 100 characters.  The completion policy is recorded on the run
+    instead, so a completed run is only reused when it was produced under the
+    same policy as the current request.
+    """
+
+    payload = {
+        "analysis_run_id": settings.analysis_run_id,
+        "minimum_coverage_ratio": settings.analysis_minimum_coverage_ratio,
+        "maximum_gap_seconds": settings.analysis_maximum_gap_seconds,
+        "quality_policy_version": settings.quality_policy_version,
+        "business_utc_offset_seconds": settings.business_utc_offset_seconds,
+        "appliance_types": list(APPLIANCE_TYPES),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()[:16]
+
+
+def _reusable_manifest(
+    storage, session_factory, catalog, target_date: date, run_id: UUID, digest: str
+) -> dict | None:
+    """The manifest of a completed run that used the same inputs and policy."""
+
+    with session_factory() as session:
+        run = session.get(LakeBatchRun, run_id)
+    if run is None or (run.details or {}).get("analysis_policy_digest") != digest:
+        return None
+    ref = catalog.active_version(DATASET_APPLIANCE_USAGE_DAILY, target_date)
+    if ref is None or ref.run_id != run_id:
+        return None
+    manifest = json.loads(storage.read_bytes(ref.manifest_path))
+    return {**manifest, "reused_run_id": str(run_id)}
+
+
+def run_analysis_daily(
+    settings,
+    target_date: date,
+    *,
+    storage,
+    session_factory,
+    spark,
+    input_snapshot: AnalysisInputSnapshot | None = None,
+    force: bool = False,
+) -> dict:
+    """Publish (or reuse) the daily coverage, slices and usage for one date.
+
+    A rerun with the same power Silver input, the same confirmed receipt and
+    session selection, the same rule and the same completion policy returns the
+    completed run's manifest (with ``reused_run_id``) instead of publishing a
+    new version.  Without this, every ``gold-profile daily`` rerun would move the
+    Gold input snapshot and produce a new profile revision from identical data.
+    """
+
     catalog = SilverCatalog(session_factory)
     power_ref = catalog.active_version(DATASET_POWER_CLEAN, target_date)
     observation_ref = catalog.active_version(DATASET_OBSERVATION, target_date)
@@ -101,23 +302,44 @@ def run_analysis_daily(settings, target_date: date, *, storage, session_factory,
     if power_ref.input_snapshot_id != observation_ref.input_snapshot_id:
         raise RuntimeError("power and observation inputs do not share one snapshot")
 
-    receipt_files, receipt_snapshot, _receipt_manifests = _confirmed_files(
-        storage, settings.receipt_manifest_base
-    )
-    session_files, session_snapshot, session_manifests = _confirmed_files(
-        storage, settings.session_manifest_base
-    )
-    if session_manifests == 0:
-        raise RuntimeError("no confirmed session manifest; run initial-load first")
+    selected = input_snapshot or select_analysis_input_snapshot(settings, storage=storage)
+    selected.validate(storage)
+    receipt_files = [item.path for item in selected.receipt_files]
+    session_files = [item.path for item in selected.session_files]
+    receipt_snapshot = selected.receipt_snapshot_id
+    session_snapshot = selected.session_snapshot_id
 
     repository = SilverCommitRepository(session_factory, job_name=JOB_NAME)
-    config_version = f"receipts={receipt_snapshot[:12]};sessions={session_snapshot[:12]}"
+    config_version = (
+        f"receipts={receipt_snapshot[:32]};sessions={selected.session_token}"
+    )
+    policy_digest = analysis_policy_digest(settings)
+    if not force:
+        reusable = repository.completed_run(
+            target_date,
+            input_snapshot_id=power_ref.input_snapshot_id,
+            rule_version=settings.analysis_rule_version,
+            config_version=config_version,
+            dataset_names=ANALYSIS_DATASETS,
+        )
+        if reusable is not None:
+            manifest = _reusable_manifest(
+                storage, session_factory, catalog, target_date, reusable, policy_digest
+            )
+            if manifest is not None:
+                return manifest
     handle = repository.start(
         target_date,
         input_snapshot_id=power_ref.input_snapshot_id,
         rule_version=settings.analysis_rule_version,
         config_version=config_version,
-        details={"receipt_snapshot": receipt_snapshot, "session_snapshot": session_snapshot},
+        details={
+            "analysis_input_snapshot": selected.as_dict(),
+            "analysis_input_snapshot_id": selected.snapshot_id,
+            "receipt_snapshot": receipt_snapshot,
+            "session_snapshot": session_snapshot,
+            "analysis_policy_digest": policy_digest,
+        },
     )
     run_id = str(handle.run_id)
     root = f"{settings.analysis_staging_base}/target_date={target_date}/run_id={run_id}"
@@ -196,12 +418,17 @@ def run_analysis_daily(settings, target_date: date, *, storage, session_factory,
             "config_version": config_version,
             "analysis_evidence_snapshot_id": receipt_snapshot,
             "session_manifest_set_id": session_snapshot,
+            "analysis_input_snapshot_id": selected.snapshot_id,
+            "analysis_input_snapshot": selected.as_dict(),
             "depends_on": dependency_entries([power_ref, observation_ref]),
             "outputs": output_meta,
             "completed_at": datetime.now(timezone.utc).isoformat(),
         }
         path = manifest_path(settings.analysis_manifest_base, target_date, run_id)
         manifest["manifest_path"] = path
+        # Spark actions above may take minutes.  Refuse to publish if a producer
+        # violated the append-only contract while this run was reading the files.
+        selected.validate(storage)
         write_manifest(storage, path, manifest)
         repository.publish(manifest, depends_on=[power_ref, observation_ref])
 

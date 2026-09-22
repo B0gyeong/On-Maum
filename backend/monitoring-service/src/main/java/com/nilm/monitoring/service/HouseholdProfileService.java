@@ -110,6 +110,8 @@ public class HouseholdProfileService {
         Subject subject = matches.get(0);
 
         // 재전송이나 파티션 재배치로 같은 버전이 다시 와도 아무것도 하지 않는다.
+        // 정상 SHADOW -> ACTIVE는 배치의 새 실행/버전으로 와야 하므로 이 멱등 판정에
+        // 막히지 않는다. 같은 버전의 mode만 바꿔 보내는 것은 계약 위반이다.
         if (profiles.existsByHouseholdIdAndProfileVersion(
                 message.householdId(), message.profileVersion())) {
             log.debug("이미 수신한 프로필 버전 무시: householdId={}, profileVersion={}",

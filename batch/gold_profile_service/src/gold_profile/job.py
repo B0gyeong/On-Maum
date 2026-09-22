@@ -34,7 +34,7 @@ from gold_profile.statistical_profile import build_statistical_profiles
 from gold_profile.validation import (
     validate_baselines, validate_logical_uses, validate_statistics,
 )
-from gold_profile.session_snapshot import require_one_session_snapshot
+from gold_profile.session_snapshot import require_matching_session_outputs
 
 
 JOB_NAME = "gold-profile"
@@ -86,6 +86,9 @@ def config_version_of(settings) -> str:
         "bucket_minutes": settings.profile_time_bucket_minutes,
         "offset": settings.business_utc_offset_seconds,
         "statistic_rule_version": settings.profile_statistic_rule_version,
+        # Delivery intent is part of the run identity.  A SHADOW result must
+        # never satisfy an ACTIVE request, even when every data input is equal.
+        "delivery_mode": settings.profile_delivery_mode,
     }
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
     return f"gold-profile-config@{digest[:16]}"
@@ -129,13 +132,21 @@ def _repair_reused_delivery(
     if baseline_ref.run_id != run_id or statistic_ref.run_id != run_id:
         raise RuntimeError("active Gold components do not match the reused run")
     manifest = json.loads(storage.read_bytes(baseline_ref.manifest_path))
+    manifest_delivery_mode = manifest.get("delivery_mode", "SHADOW")
+    if manifest_delivery_mode != settings.profile_delivery_mode:
+        raise RuntimeError(
+            "reused Gold run delivery mode does not match the requested mode: "
+            f"manifest={manifest_delivery_mode}, requested={settings.profile_delivery_mode}"
+        )
     effective_from = datetime.fromisoformat(manifest["effective_from"])
     baseline = spark.read.parquet(storage.uri(baseline_ref.output_path))
     statistics = spark.read.parquet(storage.uri(statistic_ref.output_path))
     payloads = build_household_messages(
         baseline, statistics,
         profile_version=str(run_id), profile_revision=_revision_of(session_factory, run_id),
-        delivery_mode=manifest.get("delivery_mode", "SHADOW"),
+        # Provenance and content come from the immutable manifest.  Delivery
+        # policy comes from the current request after the equality guard above.
+        delivery_mode=settings.profile_delivery_mode,
         as_of_date=as_of_date,
         window_start_date=date.fromisoformat(manifest["input"]["window_start_date"]),
         effective_from=effective_from, published_at=effective_from,
@@ -157,6 +168,7 @@ def run_gold_profile(
     spark,
     now: datetime | None = None,
     force: bool = False,
+    input_snapshot=None,
 ) -> GoldJobResult:
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     repository = SilverCommitRepository(session_factory, job_name=JOB_NAME)
@@ -169,6 +181,7 @@ def run_gold_profile(
         return _run_locked(
             settings, as_of_date, storage=storage, session_factory=session_factory,
             spark=spark, repository=repository, now=now, force=force,
+            input_snapshot=input_snapshot,
         )
     finally:
         lock.__exit__(None, None, None)
@@ -176,20 +189,33 @@ def run_gold_profile(
 
 def _run_locked(
     settings, as_of_date: date, *, storage, session_factory, spark, repository,
-    now: datetime, force: bool,
+    now: datetime, force: bool, input_snapshot=None,
 ) -> GoldJobResult:
     repository.recover(storage, settings.profile_manifest_base, as_of_date)
     dates = window_dates(as_of_date, settings.profile_window_days)
     catalog = SilverCatalog(session_factory)
     usage_versions = catalog.active_versions(DATASET_APPLIANCE_USAGE_DAILY, dates)
     slice_versions = catalog.active_versions(DATASET_SESSION_SLICES, dates)
-    snapshot = build_profile_snapshot(
+    current_snapshot = build_profile_snapshot(
         as_of_date, settings.profile_window_days, usage_versions, slice_versions,
         rule_version=settings.profile_rule_version,
         statistic_rule_version=settings.profile_statistic_rule_version,
         analysis_run_id=settings.analysis_run_id,
         timezone_name=f"UTC{settings.business_utc_offset_seconds:+d}s",
     )
+    if input_snapshot is not None:
+        if (
+            input_snapshot.as_of_date != as_of_date
+            or input_snapshot.expected_dates != dates
+        ):
+            raise ValueError("selected Gold input does not match the requested window")
+        if input_snapshot.snapshot_id != current_snapshot.snapshot_id:
+            raise RuntimeError(
+                "active analysis versions changed after Gold input selection"
+            )
+        snapshot = input_snapshot
+    else:
+        snapshot = current_snapshot
     config_version = config_version_of(settings)
     if not force:
         reusable = repository.completed_run(
@@ -217,14 +243,21 @@ def _run_locked(
     final = _paths(settings, as_of_date, run_id, staging=False)
     all_refs = [*snapshot.usage_refs, *snapshot.slice_refs]
     try:
-        # A tombstone has no slice row.  Therefore row-level max(version) is safe
-        # only after all selected dates prove they were rebuilt from one global
-        # session state.  Incomplete profiles remain buildable but are rejected
-        # by the consumer and never become operational.
-        require_one_session_snapshot(
+        # A tombstone has no slice row.  Version-level provenance must therefore
+        # prove that the daily summary and even a zero-row slice were published
+        # together from one global session state.
+        if set(snapshot.missing_usage_dates) != set(snapshot.missing_slice_dates):
+            raise ValueError(
+                "daily usage and session slice availability differs by date"
+            )
+        present_dates = tuple(
+            day for day in snapshot.expected_dates
+            if day not in set(snapshot.missing_usage_dates)
+        )
+        require_matching_session_outputs(
+            snapshot.usage_refs,
             snapshot.slice_refs,
-            snapshot.expected_dates if not snapshot.incomplete
-            else tuple(ref.target_date for ref in snapshot.slice_refs),
+            present_dates,
         )
         daily_usage = _read_paths(spark, storage, snapshot.usage_refs, USAGE_SCHEMA).cache()
         slices = _read_paths(spark, storage, snapshot.slice_refs, SLICE_SCHEMA).cache()

@@ -59,6 +59,10 @@ class GoldProfileDeliveryOutbox(Base):
 
 
 def event_id_for(payload: dict) -> UUID:
+    # A delivery-mode change normally has a different profile_version because
+    # it is a new Gold run.  Keeping the mode in the event identity also makes
+    # retries idempotent without confusing an old PUBLISHED SHADOW row with the
+    # new ACTIVE request.
     return uuid5(
         OUTBOX_NAMESPACE,
         f"{payload['household_id']}:{payload['profile_version']}:{payload['delivery_mode']}",

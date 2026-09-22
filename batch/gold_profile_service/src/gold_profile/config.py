@@ -15,6 +15,8 @@ class GoldProfileSettings(SilverSettings):
     profile_statistic_rule_version: str = "household-statistics-v1-nearest-rank"
     profile_manifest_base: str = "/nilm/manifests/job=gold-profile"
     profile_staging_base: str = "/nilm/gold/.staging/job=gold-profile"
+    # This is included in Gold's config_version.  Changing SHADOW -> ACTIVE
+    # therefore creates a new run/version instead of relabelling old history.
     profile_delivery_mode: str = Field(default="SHADOW", pattern="^(ACTIVE|SHADOW)$")
     # 아웃박스를 비우는 발행자가 붙을 브로커. 이름은 분석·집계 서비스와 같은 변수를 쓴다.
     kafka_bootstrap_servers: str = "localhost:9092"

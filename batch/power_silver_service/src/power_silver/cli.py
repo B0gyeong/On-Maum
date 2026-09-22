@@ -82,6 +82,10 @@ def build_parser() -> argparse.ArgumentParser:
         "usage-daily", help="분석 커버리지와 일별 가전 사용 요약을 만든다"
     )
     usage.add_argument("--date", help="대상 업무 날짜(YYYY-MM-DD). 기본값은 어제")
+    usage.add_argument(
+        "--force", action="store_true",
+        help="같은 입력·규칙·정책으로 확정된 실행이 있어도 다시 계산한다",
+    )
 
     return parser
 
@@ -135,11 +139,13 @@ def main(argv: list[str] | None = None) -> int:
                 storage=storage,
                 session_factory=session_factory,
                 spark=spark,
+                force=arguments.force,
             )
             logger.info(
-                "analysis-usage-daily %s succeeded: run_id=%s",
+                "analysis-usage-daily %s succeeded: run_id=%s reused=%s",
                 target_date,
                 manifest["run_id"],
+                manifest.get("reused_run_id") is not None,
             )
             return 0
         finally:

@@ -27,5 +27,8 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src", "../power_silver_service/src", "../../ai/realtime-analysis-service/src"]
 testpaths = ["tests"]
-markers = ["spark: requires a working local PySpark runtime"]
+markers = [
+    "spark: requires a working local PySpark runtime",
+    "e2e: local end-to-end run; needs GOLD_E2E_DATABASE_URL (see tests/test_e2e_local_pipeline.py)",
+]
 

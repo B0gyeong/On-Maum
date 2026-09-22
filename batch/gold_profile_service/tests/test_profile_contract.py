@@ -7,6 +7,8 @@ import pytest
 from gold_profile.catalog import affected_as_of_dates
 from gold_profile.cli import build_parser
 from gold_profile.input_snapshot import build_profile_snapshot, window_dates
+from gold_profile.config import GoldProfileSettings
+from gold_profile.job import config_version_of
 from gold_profile.routine_baseline import nearest_rank_value
 
 
@@ -71,3 +73,10 @@ def test_cli_contract():
     parser = build_parser()
     assert parser.parse_args(["run", "--as-of", "2026-09-19"]).command == "run"
     assert parser.parse_args(["dirty", "--as-of", "2026-09-19"]).command == "dirty"
+
+
+def test_delivery_mode_is_part_of_gold_run_configuration():
+    shadow = GoldProfileSettings(profile_delivery_mode="SHADOW")
+    active = shadow.model_copy(update={"profile_delivery_mode": "ACTIVE"})
+
+    assert config_version_of(shadow) != config_version_of(active)

@@ -22,11 +22,17 @@ public record HouseholdProfileMessage(
         @JsonProperty("household_id")
         String householdId,
 
-        /** Gold 배치의 run_id. 멱등 판정의 기준이다. */
+        /**
+         * Gold 배치의 run_id. 멱등 판정의 기준이다.
+         * SHADOW -> ACTIVE 전환은 새 실행이므로 새 profile_version을 사용한다.
+         */
         @JsonProperty("profile_version")
         String profileVersion,
 
-        /** 같은 as_of_date 안에서 생산자가 단조 증가시키는 수정 순번. */
+        /**
+         * 같은 as_of_date 안에서 생산자가 단조 증가시키는 실행 순번.
+         * 수신 순서가 바뀌어도 더 낮은 revision은 운영 ACTIVE를 덮지 못한다.
+         */
         @JsonProperty("profile_revision")
         Long profileRevision,
 

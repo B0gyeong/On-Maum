@@ -68,6 +68,41 @@ def test_failed_publish_is_retried_and_duplicate_enqueue_is_harmless(tmp_path):
     assert len(producer.messages) == 2
 
 
+def test_published_shadow_does_not_consume_new_active_run(tmp_path):
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'outbox.db'}")
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine, expire_on_commit=False)
+    now = datetime(2026, 9, 20, tzinfo=timezone.utc)
+    shadow = {
+        **payload("shadow-run"),
+        "profile_revision": 1,
+        "delivery_mode": "SHADOW",
+    }
+    active = {
+        **payload("active-run"),
+        "profile_revision": 2,
+        "delivery_mode": "ACTIVE",
+    }
+    with sessions.begin() as session:
+        assert enqueue_payloads(session, [shadow], now=now) == 1
+        row = session.query(GoldProfileDeliveryOutbox).one()
+        row.status = "PUBLISHED"
+        row.published_at = now
+
+    with sessions.begin() as session:
+        assert enqueue_payloads(session, [active], now=now) == 1
+        assert enqueue_payloads(session, [active], now=now) == 0
+
+    with sessions() as session:
+        rows = session.query(GoldProfileDeliveryOutbox).order_by(
+            GoldProfileDeliveryOutbox.profile_revision
+        ).all()
+        assert [(row.delivery_mode, row.status) for row in rows] == [
+            ("SHADOW", "PUBLISHED"),
+            ("ACTIVE", "PENDING"),
+        ]
+
+
 def test_publisher_reads_its_broker_from_settings(monkeypatch):
     """ACTIVE 전달은 설정에서 브로커 주소를 읽는다.
 

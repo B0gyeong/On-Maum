@@ -7,9 +7,9 @@ Silver도 Gold도 일회성 배치라, 지금까지는 사람이 네 명령을 �
 
 창 정렬이 이 파이프라인의 핵심이다. Gold는 프로필 창(기본 28일)의 모든 날짜가
 **같은 세션 스냅샷에서 만들어졌을 것**을 요구한다(:mod:`gold_profile.session_snapshot`).
-세션은 나중에 고쳐지거나 지워지므로, 전날 하나만 집계하면 그 날짜만 새 스냅샷을
-쓰고 나머지는 옛 스냅샷에 머물러 Gold가 멈춘다. 그래서 Gold를 부르기 전에
-토큰이 어긋난 날짜를 찾아 다시 집계한다.
+실행마다 확정 receipt/session manifest 집합을 한 번 고정하고 대상일과 재집계일에
+그 객체를 전달한다. 따라서 실행 중 새 manifest가 도착해도 현재 창은 움직이지 않고,
+새 입력은 다음 실행이 선택한다.
 
 스냅샷 토큰은 세션 슬라이스가 아니라 **일별 사용 요약**의 ``config_version``에서
 읽는다. 세션이 하나도 없는 날은 슬라이스 자체가 생기지 않아, 슬라이스만 보면
@@ -27,22 +27,27 @@ from datetime import date
 import logging
 import time
 
-from power_silver.analysis_job import run_analysis_daily
+from power_silver.analysis_job import (
+    run_analysis_daily,
+    select_analysis_input_snapshot,
+)
 from power_silver.catalog import SilverCatalog
 from power_silver.commit import SilverCommitRepository
 from power_silver.constants import (
     DATASET_APPLIANCE_USAGE_DAILY,
     DATASET_OBSERVATION,
     DATASET_POWER_CLEAN,
+    DATASET_SESSION_SLICES,
     RUN_SKIPPED,
     RUN_SUCCEEDED,
+    RUN_WAITING_INPUT,
 )
 from power_silver.job import run_daily
 from power_silver.targets import load_targets
 
-from gold_profile.input_snapshot import window_dates
+from gold_profile.input_snapshot import build_profile_snapshot, window_dates
 from gold_profile.job import run_gold_profile
-from gold_profile.session_snapshot import session_state_token
+from gold_profile.session_snapshot import inspect_session_snapshot
 
 
 logger = logging.getLogger(__name__)
@@ -59,14 +64,29 @@ STATUS_SKIPPED = "SKIPPED"
 #: 단계는 끝났지만 남은 일이 있다. 다음 주기가 이어받는다.
 STATUS_PARTIAL = "PARTIAL"
 
+RUN_INPUT_INCOMPLETE = "INPUT_INCOMPLETE"
+RUN_PUBLISH_PENDING = "PUBLISH_PENDING"
+
 #: 창을 맞추지 못한 이유.
 ALIGN_NO_TARGET_TOKEN = "NO_TARGET_TOKEN"
 ALIGN_INPUT_MISSING = "INPUT_MISSING"
-ALIGN_SNAPSHOT_MOVING = "SNAPSHOT_KEPT_MOVING"
+ALIGN_FINAL_MISMATCH = "FINAL_ALIGNMENT_FAILED"
+# 이전 코드/대시보드가 import하는 이름은 유지한다.
+ALIGN_SNAPSHOT_MOVING = ALIGN_FINAL_MISMATCH
 
 
 class StageFailed(RuntimeError):
     """한 단계가 정해진 횟수만큼 다시 시도하고도 끝내 실패했다."""
+
+
+class PipelineStopped(RuntimeError):
+    def __init__(self, status: str):
+        super().__init__(status)
+        self.status = status
+
+
+class InputNotReady(RuntimeError):
+    """The upstream manifest boundary has not made the target date final yet."""
 
 
 @dataclass
@@ -102,8 +122,8 @@ def run_daily_pipeline(
 
     :param stages: 단계 구현. :class:`SparkDailyStages`를 참고한다
     :param attempts: 단계 하나를 다시 시도할 최대 횟수
-    :param alignment_passes: 창 정렬을 다시 확인할 최대 횟수. 정렬하는 동안 새
-        세션 manifest가 도착하면 토큰이 또 움직이므로 한 번으로는 모자랄 수 있다
+    :param alignment_passes: 이전 호출자 호환용. 입력을 고정하므로 한 번의 재집계와
+        최종 검증만 수행한다
     :return: 단계별 결과가 담긴 보고서. 예외를 밖으로 내지 않는다
     """
 
@@ -122,6 +142,10 @@ def run_daily_pipeline(
                     "%s 실패 (%s/%s): %s", name, number, attempts, stage.error
                 )
                 if number >= attempts:
+                    if isinstance(error, InputNotReady):
+                        stage.status = STATUS_PARTIAL
+                        stage.detail["status"] = RUN_WAITING_INPUT
+                        raise PipelineStopped(RUN_INPUT_INCOMPLETE) from error
                     raise StageFailed(f"{name}: {stage.error}") from error
                 sleep(retry_seconds)
                 continue
@@ -134,102 +158,161 @@ def run_daily_pipeline(
         status = stages.power_silver(as_of_date)
         # SKIPPED는 다른 작성자가 그 날짜를 맡았다는 뜻이라 실패가 아니다.
         # WAITING_INPUT은 입력이 아직 안 왔다는 뜻이므로 다시 시도한다.
+        if status == RUN_WAITING_INPUT:
+            raise InputNotReady(f"status={status}")
         if status not in (RUN_SUCCEEDED, RUN_SKIPPED):
             raise RuntimeError(f"status={status}")
         return status
 
-    ok = True
+    outcome = STATUS_SUCCEEDED
     try:
         stage, status = attempt(STAGE_POWER_SILVER, power_silver)
         stage.detail["status"] = status
+        if status == RUN_SKIPPED:
+            stage.status = STATUS_SKIPPED
+            raise PipelineStopped(STATUS_SKIPPED)
 
-        attempt(STAGE_USAGE_DAILY, lambda: stages.usage_daily(as_of_date))
+        selected = {"input": None}
+
+        def usage_daily():
+            if selected["input"] is None:
+                selected["input"] = stages.select_analysis_input()
+            return stages.usage_daily(as_of_date, selected["input"])
+
+        stage, _manifest = attempt(
+            STAGE_USAGE_DAILY,
+            usage_daily,
+        )
+        selected_input = selected["input"]
+        stage.detail.update({
+            "input_snapshot_id": selected_input.snapshot_id,
+            "receipt_snapshot_id": selected_input.receipt_snapshot_id,
+            "session_snapshot_id": selected_input.session_snapshot_id,
+        })
 
         if align_window:
             stage, detail = attempt(
                 STAGE_ALIGN_WINDOW,
-                lambda: _align_window(stages, as_of_date, alignment_passes),
+                lambda: _align_window(
+                    stages, as_of_date, selected_input, alignment_passes
+                ),
             )
             stage.detail.update(detail)
             if not detail["aligned"]:
-                # 멈추지 않는다. 맞출 수 없는 창인지는 Gold의 규칙이 판정한다.
                 stage.status = STATUS_PARTIAL
+                # An operational Gold profile cannot be proved safe from this
+                # window.  A later run/backfill must repair it first.
+                raise PipelineStopped(RUN_INPUT_INCOMPLETE)
         else:
             reports.append(StageReport(STAGE_ALIGN_WINDOW, STATUS_SKIPPED))
 
-        stage, status = attempt(
-            STAGE_GOLD_PROFILE, lambda: stages.gold_profile(as_of_date)
-        )
-        stage.detail["status"] = status
+        def gold_profile():
+            snapshot = stages.profile_input_snapshot(
+                as_of_date, selected_input.session_token
+            )
+            result = stages.gold_profile(as_of_date, snapshot)
+            if result.status not in (RUN_SUCCEEDED, RUN_SKIPPED):
+                raise RuntimeError(f"status={result.status}")
+            return snapshot, result
+
+        stage, (gold_input, result) = attempt(STAGE_GOLD_PROFILE, gold_profile)
+        stage.detail.update({
+            "status": result.status,
+            "incomplete": result.incomplete,
+            "run_id": result.run_id,
+            "reused_run_id": result.reused_run_id,
+            "input_snapshot_id": gold_input.snapshot_id,
+        })
+        if result.status == RUN_SKIPPED:
+            stage.status = STATUS_SKIPPED
+            raise PipelineStopped(STATUS_SKIPPED)
+        if result.incomplete:
+            stage.status = STATUS_PARTIAL
+            raise PipelineStopped(RUN_INPUT_INCOMPLETE)
 
         if publish:
             stage, counts = attempt(STAGE_PUBLISH, stages.publish)
             published, failed = counts
-            stage.detail.update({"published": published, "failed": failed})
+            stage.detail.update({
+                "outbox_messages_published": published,
+                "outbox_messages_failed": failed,
+            })
             if failed:
                 # 아웃박스 행은 남아 있다. 발행자가 다음 주기에 다시 보낸다.
                 stage.status = STATUS_PARTIAL
+                outcome = RUN_PUBLISH_PENDING
         else:
             reports.append(StageReport(STAGE_PUBLISH, STATUS_SKIPPED))
+            outcome = RUN_PUBLISH_PENDING
+    except PipelineStopped as stopped:
+        outcome = stopped.status
     except StageFailed as error:
-        ok = False
+        outcome = STATUS_FAILED
         logger.error("일일 파이프라인이 멈췄다: %s", error)
 
     return {
         "as_of_date": as_of_date.isoformat(),
-        "ok": ok,
+        "status": outcome,
+        "ok": outcome == STATUS_SUCCEEDED,
         "stages": [item.as_dict() for item in reports],
     }
 
 
-def _align_window(stages, as_of_date: date, passes: int) -> dict:
+def _align_window(stages, as_of_date: date, selected_input, passes: int) -> dict:
     """창 안의 모든 날짜를 대상 날짜와 같은 세션 스냅샷으로 맞춘다.
 
     토큰이 없는 날짜(아직 집계하지 않은 날)도 어긋난 것으로 본다. 그대로 두면
     Gold가 창이 모자란 프로필을 만들고, 소비자는 그 프로필을 거절한다.
     """
 
+    dates = stages.window_dates(as_of_date)
+    expected_token = selected_input.session_token
+    before = stages.session_alignment(dates, expected_token)
+    if before.aligned:
+        return _alignment(before, [], set(), 1, None)
+
+    stale = set(before.missing_dates)
+    stale.update(before.provenance_missing_dates)
+    stale.update(before.version_mismatch_dates)
+    stale.update(before.different_token_dates)
+    ready = stages.aggregatable_dates(stale)
+    skipped = stale - ready
     rebuilt: list[date] = []
-    skipped: set[date] = set()
-
-    for number in range(1, passes + 1):
-        dates = stages.window_dates(as_of_date)
-        tokens = stages.session_tokens(dates)
-        target = tokens.get(as_of_date)
-        if target is None:
-            # 방금 집계한 날짜에 출처가 없다. 맞출 기준이 없으니 그대로 둔다.
-            return _alignment(False, rebuilt, skipped, number, ALIGN_NO_TARGET_TOKEN)
-
-        stale = [
-            day for day in dates
-            if day != as_of_date and day not in skipped and tokens.get(day) != target
-        ]
-        if not stale:
-            return _alignment(True, rebuilt, skipped, number, None)
-
-        # 전력 Silver가 없는 날짜는 여기서 고칠 수 없다. 백필의 일이다.
-        ready = stages.aggregatable_dates(stale)
-        skipped.update(day for day in stale if day not in ready)
-        todo = [day for day in stale if day in ready]
-        if not todo:
-            return _alignment(False, rebuilt, skipped, number, ALIGN_INPUT_MISSING)
-
-        logger.info("세션 스냅샷을 맞추려고 %s일을 다시 집계한다", len(todo))
-        for day in todo:
-            stages.usage_daily(day)
+    logger.info("고정 입력으로 세션 스냅샷을 맞추려고 %s일을 다시 집계한다", len(ready))
+    for day in dates:
+        if day in ready:
+            stages.usage_daily(day, selected_input)
             rebuilt.append(day)
 
-    # 다시 집계하는 동안 새 세션 manifest가 계속 도착했다. 다음 주기가 이어받는다.
-    return _alignment(False, rebuilt, skipped, passes, ALIGN_SNAPSHOT_MOVING)
+    # Do not infer success from the work list.  Re-read ACTIVE versions using
+    # exactly the same predicate Gold applies, including skipped/missing dates.
+    final = stages.session_alignment(dates, expected_token)
+    if final.aligned:
+        return _alignment(final, rebuilt, skipped, 1, None)
+    reason = ALIGN_INPUT_MISSING if skipped or final.missing_dates else ALIGN_SNAPSHOT_MOVING
+    return _alignment(final, rebuilt, skipped, min(1, passes), reason)
 
 
-def _alignment(aligned, rebuilt, skipped, passes, reason) -> dict:
+def _alignment(check, rebuilt, skipped, passes, reason) -> dict:
+    def days(items):
+        return sorted(day.isoformat() for day in items)
+
     return {
-        "aligned": aligned,
+        "aligned": check.aligned,
         "reason": reason,
         "passes": passes,
         "rebuilt_dates": [day.isoformat() for day in rebuilt],
-        "skipped_dates": sorted(day.isoformat() for day in skipped),
+        "skipped_dates": days(skipped),
+        "missing_dates": days(check.missing_dates),
+        "missing_usage_dates": days(check.missing_usage_dates),
+        "missing_slice_dates": days(check.missing_slice_dates),
+        "provenance_missing_dates": days(check.provenance_missing_dates),
+        "version_mismatch_dates": days(check.version_mismatch_dates),
+        "different_token_dates": days(check.different_token_dates),
+        "tokens_by_date": {
+            day.isoformat(): token
+            for day, token in sorted(check.tokens_by_date.items())
+        },
     }
 
 
@@ -265,16 +348,29 @@ class SparkDailyStages:
         )
         return result.status
 
-    def usage_daily(self, day: date) -> None:
+    def select_analysis_input(self):
+        return select_analysis_input_snapshot(self._settings, storage=self._storage)
+
+    def usage_daily(self, day: date, input_snapshot=None) -> dict:
         manifest = run_analysis_daily(
             self._settings, day,
             storage=self._storage, session_factory=self._sessions, spark=self._spark,
+            input_snapshot=input_snapshot,
         )
         logger.info("analysis-usage-daily %s: run_id=%s", day, manifest["run_id"])
+        return manifest
 
-    def session_tokens(self, dates) -> dict[date, str | None]:
-        versions = self._catalog.active_versions(DATASET_APPLIANCE_USAGE_DAILY, dates)
-        return {day: session_state_token(ref) for day, ref in versions.items()}
+    def _analysis_versions(self, dates):
+        return (
+            self._catalog.active_versions(DATASET_APPLIANCE_USAGE_DAILY, dates),
+            self._catalog.active_versions(DATASET_SESSION_SLICES, dates),
+        )
+
+    def session_alignment(self, dates, expected_token):
+        usage, slices = self._analysis_versions(dates)
+        return inspect_session_snapshot(
+            usage.values(), slices.values(), dates, expected_token=expected_token
+        )
 
     def aggregatable_dates(self, dates) -> set[date]:
         dates = tuple(dates)
@@ -282,18 +378,39 @@ class SparkDailyStages:
         observation = self._catalog.active_versions(DATASET_OBSERVATION, dates)
         return {day for day in dates if day in power and day in observation}
 
-    def gold_profile(self, as_of_date: date) -> str:
+    def profile_input_snapshot(self, as_of_date: date, expected_token: str):
+        dates = self.window_dates(as_of_date)
+        usage, slices = self._analysis_versions(dates)
+        check = inspect_session_snapshot(
+            usage.values(), slices.values(), dates, expected_token=expected_token
+        )
+        if not check.aligned:
+            raise RuntimeError("analysis versions changed before Gold input selection")
+        return build_profile_snapshot(
+            as_of_date,
+            self._settings.profile_window_days,
+            usage,
+            slices,
+            rule_version=self._settings.profile_rule_version,
+            statistic_rule_version=self._settings.profile_statistic_rule_version,
+            analysis_run_id=self._settings.analysis_run_id,
+            timezone_name=f"UTC{self._settings.business_utc_offset_seconds:+d}s",
+        )
+
+    def gold_profile(self, as_of_date: date, input_snapshot=None):
         result = run_gold_profile(
             self._settings, as_of_date,
             storage=self._storage, session_factory=self._sessions,
-            spark=self._spark, force=False,
+            spark=self._spark, force=False, input_snapshot=input_snapshot,
         )
         logger.info(
             "gold-profile %s: status=%s run=%s reused=%s incomplete=%s",
             as_of_date, result.status, result.run_id,
             result.reused_run_id, result.incomplete,
         )
-        return result.status
+        # The orchestrator needs the run/reuse/incomplete fields as well as the
+        # status to produce its result contract and decide whether to publish.
+        return result
 
     def publish(self) -> tuple[int, int]:
         if self._publisher is None:

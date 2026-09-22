@@ -31,6 +31,9 @@ case "$phase" in
   b-loader)
     docker compose up -d --pull never --no-deps --wait --wait-timeout 180 bronze-loader
     docker compose up -d --pull never --no-deps --wait --wait-timeout 180 session-lake-loader
+    # realtime-analysis-service applies the outbox migration before this phase.
+    # The resident publisher resumes every durable PENDING row after restarts.
+    docker compose up -d --pull never --no-deps --wait --wait-timeout 180 gold-profile-publisher
     ;;
   *) echo "Unknown deployment phase" >&2; exit 2 ;;
 esac

@@ -48,6 +48,10 @@ def build_household_messages(
     statistic_rule_version: str,
     input_incomplete: bool,
 ) -> list[dict]:
+    if profile_revision < 1:
+        raise ValueError("profile_revision must be positive")
+    if delivery_mode not in {"ACTIVE", "SHADOW"}:
+        raise ValueError(f"unsupported delivery_mode: {delivery_mode}")
     baseline_rows = baseline.collect()
     statistic_rows = statistics.collect()
     households = sorted({row.household_id for row in [*baseline_rows, *statistic_rows]})

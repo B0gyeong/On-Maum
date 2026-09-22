@@ -1,10 +1,15 @@
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
 from gold_profile.logical_uses import build_logical_uses
-from gold_profile.session_snapshot import require_one_session_snapshot
+from gold_profile.session_snapshot import (
+    inspect_session_snapshot,
+    require_matching_session_outputs,
+    require_one_session_snapshot,
+)
 
 
 pytestmark = pytest.mark.spark
@@ -46,3 +51,46 @@ def test_all_dates_reprocessed_after_delete_or_move_are_accepted():
         SimpleNamespace(config_version="receipts=b;sessions=after-change"),
     ]
     assert require_one_session_snapshot(refs, days) == "after-change"
+
+
+def test_usage_and_zero_row_slice_versions_must_share_the_selected_input():
+    days = (date(2026, 9, 18), date(2026, 9, 19))
+    runs = [uuid4(), uuid4()]
+    usage = [
+        SimpleNamespace(
+            target_date=day, run_id=run,
+            config_version="receipts=r;sessions=selected",
+        )
+        for day, run in zip(days, runs)
+    ]
+    # A version reference exists even when its parquet contains zero rows.
+    slices = [
+        SimpleNamespace(
+            target_date=day, run_id=run,
+            config_version="receipts=r;sessions=selected",
+        )
+        for day, run in zip(days, runs)
+    ]
+
+    assert require_matching_session_outputs(
+        usage, slices, days, expected_token="selected"
+    ) == "selected"
+
+
+def test_missing_and_provenance_failures_are_reported_separately():
+    days = (date(2026, 9, 18), date(2026, 9, 19))
+    run = uuid4()
+    usage = [
+        SimpleNamespace(target_date=days[0], run_id=run, config_version="legacy")
+    ]
+    slices = [
+        SimpleNamespace(target_date=days[0], run_id=run, config_version="legacy")
+    ]
+
+    check = inspect_session_snapshot(
+        usage, slices, days, expected_token="selected"
+    )
+
+    assert check.aligned is False
+    assert check.missing_dates == (days[1],)
+    assert check.provenance_missing_dates == (days[0],)

@@ -100,12 +100,22 @@ class RiskAssessmentIsolationTest {
 
     /** 이벤트 경로가 세운 등급을 흉내낸다. 해제 조건은 아직 오지 않은 상태다. */
     private void seedEventRisk(String householdId, String level, int score) {
+        seedEventRisk(householdId, level, score, NOW);
+    }
+
+    /**
+     * 평가가 쓰는 시계에 맞춰 이벤트 등급을 세운다.
+     *
+     * <p>스케줄러는 벽시계로 평가하므로 고정 시각 {@link #NOW}로 세운 등급은 실제 시각이
+     * 최대 유지시간을 지나면 해제된다. 스케줄러를 거치는 단정은 벽시계 기준으로 심어야 한다.
+     */
+    private void seedEventRisk(String householdId, String level, int score, OffsetDateTime setAt) {
         jdbc.update("""
                 update subjects
                 set event_risk_level = ?, event_risk_score = ?, event_risk_appliance = 'KETTLE',
                     event_risk_set_at = ?, current_risk_level = ?, current_risk_score = ?
                 where household_id = ?
-                """, level, score, NOW, level, score, householdId);
+                """, level, score, setAt, level, score, householdId);
     }
 
     @Test
@@ -134,8 +144,8 @@ class RiskAssessmentIsolationTest {
 
     @Test
     void 서로_다른_가구는_각자의_결과로_독립적으로_반영된다() {
-        // 한쪽에만 이벤트 등급이 서 있다.
-        seedEventRisk("house-a", "DANGER", 95);
+        // 한쪽에만 이벤트 등급이 서 있다. 스케줄러는 벽시계로 평가하므로 그 시계로 세운다.
+        seedEventRisk("house-a", "DANGER", 95, OffsetDateTime.now(ZoneOffset.UTC));
 
         scheduler.evaluateAll();
 

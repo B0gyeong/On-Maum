@@ -9,6 +9,10 @@ receipt·세션 manifest를 결합해 Silver `analysis_coverage`,
 `appliance_session_daily_slices`, Gold `appliance_usage_daily`, DB
 `analysis_daily_completion` revision을 생성한다. `NOT_USED`는 관측·분석·전달·세션
 품질이 모두 적격일 때만 만들며, 나머지 미확인 상태는 `UNKNOWN`으로 보존한다.
+같은 전력 Silver 입력·확정 manifest 선택·규칙·완료 정책으로 다시 실행하면 새 버전을
+만들지 않고 확정된 실행의 manifest(`reused_run_id`)를 돌려준다. 그래서
+`gold-profile daily`를 같은 날짜에 반복해도 Gold 입력 스냅샷이 움직이지 않는다.
+`--force`는 이 재사용을 건너뛴다.
 
 ```text
 Kafka ──▶ bronze-loader ──▶ HDFS Bronze 전력 원본 + 적재 manifest

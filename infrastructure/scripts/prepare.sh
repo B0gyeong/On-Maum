@@ -37,8 +37,13 @@ if [[ "$target" == a ]]; then
   cp -R infrastructure/observability/grafana /opt/nilm/observability/
   cp -R infrastructure/observability/prometheus /opt/nilm/observability/
 else
-  install -d /opt/nilm/postgres
+  install -d /opt/nilm/postgres /opt/nilm/bin /opt/nilm/systemd
   install -m 644 infrastructure/postgres/01-create-databases.sql /opt/nilm/postgres/01-create-databases.sql
+  install -m 755 infrastructure/scripts/run-gold-daily.sh /opt/nilm/bin/run-gold-daily.sh
+  install -m 755 infrastructure/scripts/install-gold-daily-systemd.sh /opt/nilm/bin/install-gold-daily-systemd.sh
+  install -m 644 infrastructure/ec2-b/gold-daily.env.example /opt/nilm/gold-daily.env.example
+  install -m 644 infrastructure/systemd/gold-profile-daily.service /opt/nilm/systemd/gold-profile-daily.service
+  install -m 644 infrastructure/systemd/gold-profile-daily.timer.in /opt/nilm/systemd/gold-profile-daily.timer.in
 fi
 cd /opt/nilm
 docker compose config --quiet
