@@ -16,6 +16,7 @@ from tools.consumer_load_test import (
     PrometheusClient,
     build_parser,
     config_from_args,
+    default_repo_root,
     metric_selector,
     parse_consumers,
     prom_duration,
@@ -83,9 +84,10 @@ def test_parse_consumers_rejects_invalid_values(raw: str) -> None:
 
 
 def test_seed_option_passes_to_simulator_and_metadata(tmp_path: Path) -> None:
-    args = build_parser().parse_args(["--seed", "0"])
+    args = build_parser().parse_args(["--seed", "0", "--repo-root", str(tmp_path)])
     config = config_from_args(args)
     assert config.seed == 0
+    assert config.repo_root == tmp_path.resolve()
 
     config = LoadTestConfig(repo_root=tmp_path, output_dir=tmp_path, seed=config.seed)
     runner = ConsumerLoadTest(config, PrometheusClient("http://prometheus.invalid"))
@@ -101,10 +103,28 @@ def test_seed_option_passes_to_simulator_and_metadata(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("seed", ["-1", str(2**31)])
-def test_seed_option_rejects_out_of_range_values(seed: str) -> None:
-    args = build_parser().parse_args(["--seed", seed])
+def test_seed_option_rejects_out_of_range_values(seed: str, tmp_path: Path) -> None:
+    args = build_parser().parse_args(["--seed", seed, "--repo-root", str(tmp_path)])
     with pytest.raises(LoadTestError, match="seed must be between"):
         config_from_args(args)
+
+
+def test_default_repo_root_is_inferred_from_the_repository_layout(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    (repo / "infrastructure").mkdir(parents=True)
+    tool = repo / "ai" / "realtime-analysis-service" / "tools" / "consumer_load_test.py"
+    tool.parent.mkdir(parents=True)
+    tool.touch()
+    assert default_repo_root(tool) == repo.resolve()
+
+
+def test_default_repo_root_fails_clearly_outside_the_repository(tmp_path: Path) -> None:
+    # e.g. the Docker test image copies the tool to /app/tools without the repo above it
+    tool = tmp_path / "tools" / "consumer_load_test.py"
+    tool.parent.mkdir()
+    tool.touch()
+    with pytest.raises(LoadTestError, match="--repo-root"):
+        default_repo_root(tool)
 
 
 def test_metric_selector_escapes_instance_regex_characters() -> None:
