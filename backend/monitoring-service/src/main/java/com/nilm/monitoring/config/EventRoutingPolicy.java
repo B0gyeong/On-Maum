@@ -28,6 +28,8 @@ public class EventRoutingPolicy {
     /** 유형 표가 아니라 정책 자체를 가리키는 키들. */
     private static final String KEY_DEFAULT = "DEFAULT";
     private static final String KEY_SUPPRESS_WHILE_AWAY = "SUPPRESS_WHILE_AWAY";
+    /** 기기가 꺼져 있던 구간의 이벤트를 억제할 유형 */
+    private static final String KEY_SUPPRESS_WHILE_DEVICE_OFFLINE = "SUPPRESS_WHILE_DEVICE_OFFLINE";
     private static final String KEY_RESPONSE_REQUIRED = "RESPONSE_REQUIRED";
     private static final String KEY_RESPONSE_DEADLINE_SECONDS = "RESPONSE_DEADLINE_SECONDS";
 
@@ -55,6 +57,7 @@ public class EventRoutingPolicy {
     private final Map<String, Route> routes;
     private final Route defaultRoute;
     private final Set<String> suppressWhileAway;
+    private final Set<String> suppressWhileDeviceOffline;
     private final Set<String> responseRequired;
     private final Duration responseDeadline;
 
@@ -62,6 +65,7 @@ public class EventRoutingPolicy {
         Map<String, Route> parsed = new java.util.LinkedHashMap<>();
         Route configuredDefault = FALLBACK;
         Set<String> away = Set.of();
+        Set<String> deviceOffline = Set.of();
         Set<String> response = Set.of();
         Duration deadline = Duration.ofSeconds(1800);
 
@@ -71,6 +75,7 @@ public class EventRoutingPolicy {
             switch (key) {
                 case KEY_DEFAULT -> configuredDefault = parseRoute(key, value);
                 case KEY_SUPPRESS_WHILE_AWAY -> away = parseSet(value);
+                case KEY_SUPPRESS_WHILE_DEVICE_OFFLINE -> deviceOffline = parseSet(value);
                 case KEY_RESPONSE_REQUIRED -> response = parseSet(value);
                 case KEY_RESPONSE_DEADLINE_SECONDS -> deadline = parseDeadline(value, deadline);
                 default -> parsed.put(key, parseRoute(key, value));
@@ -80,6 +85,7 @@ public class EventRoutingPolicy {
         this.routes = Map.copyOf(parsed);
         this.defaultRoute = configuredDefault;
         this.suppressWhileAway = away;
+        this.suppressWhileDeviceOffline = deviceOffline;
         this.responseRequired = response;
         this.responseDeadline = deadline;
     }
@@ -100,6 +106,17 @@ public class EventRoutingPolicy {
      */
     public boolean suppressWhileAway(String eventType) {
         return eventType != null && suppressWhileAway.contains(normalize(eventType));
+    }
+
+    /**
+     * 기기가 꺼져 있던 구간이면 억제할 유형인지.
+     *
+     * <p>무활동은 "사람이 아무것도 안 썼다"는 뜻인데 기기가 꺼져 있었다면
+     * 사람에 대한 신호가 아니다. 반대로 장시간 가전 사용처럼 이미 켜져 있던
+     * 사실에 근거한 유형은 억제 대상이 아니다.
+     */
+    public boolean suppressWhileDeviceOffline(String eventType) {
+        return eventType != null && suppressWhileDeviceOffline.contains(normalize(eventType));
     }
 
     /** 대상자 본인의 안전 확인 응답을 요구할 유형인지. */

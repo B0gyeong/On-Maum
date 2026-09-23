@@ -150,6 +150,10 @@ class AnalysisConsumer:
             topic = self._message_string(message, "topic")
             partition = self._message_int(message, "partition")
             offset = self._message_int(message, "offset")
+            logger.info(
+                "카프카 메시지 소비: 토픽=%s 파티션=%s 오프셋=%s 가구=%s 메시지=%s",
+                topic, partition, offset, measurement.household_id, measurement.message_id,
+            )
             self._remember_household(topic, partition, measurement.household_id)
             self._handler(
                 measurement,

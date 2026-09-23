@@ -35,11 +35,15 @@ public final class DeviceDtos {
             String location,
             String firmwareVer,
             DeviceStatus status,
+            /** MQTT 접속 상태 — status(생명주기)와 독립이다 */
+            Device.ConnectionStatus connectionStatus,
+            OffsetDateTime lastSeenAt,
             OffsetDateTime registeredAt
     ) {
         public static Response from(Device d) {
             return new Response(d.getDeviceId(), d.getHouseId(), d.getDeviceType(),
-                    d.getLocation(), d.getFirmwareVer(), d.getStatus(), d.getRegisteredAt());
+                    d.getLocation(), d.getFirmwareVer(), d.getStatus(),
+                    d.getConnectionStatus(), d.getLastSeenAt(), d.getRegisteredAt());
         }
     }
 
@@ -64,9 +68,9 @@ public final class DeviceDtos {
             @NotNull
             DeviceStatus status,
             @Size(max = 200)
-            String reason,
-            @Size(max = 50)
-            String changedBy
+            String reason
+            // changedBy는 받지 않는다 — 클라이언트가 보내면 남을 사칭할 수 있다.
+            // 서버가 인증된 호출자로 채운다.
     ) {
     }
 

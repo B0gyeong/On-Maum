@@ -1,6 +1,7 @@
 """Kafka publisher for analysis data-quality state changes."""
 
 import json
+import logging
 from typing import Any
 
 from confluent_kafka import Producer
@@ -8,6 +9,7 @@ from confluent_kafka import Producer
 from realtime_analysis.config import Settings
 from realtime_analysis.schemas import DataQualityEvent
 
+logger = logging.getLogger(__name__)
 
 class DataQualityEventPublisher:
     def __init__(self, settings: Settings, producer: Producer | None = None) -> None:
@@ -37,3 +39,7 @@ class DataQualityEventPublisher:
             raise RuntimeError(
                 f"Data-quality event delivery failed: {delivery_errors[0]}"
             )
+        logger.info(
+            "데이터 품질 메시지 발행 완료: 토픽=%s 가구=%s 이벤트=%s 유형=%s",
+            self._topic, event.household_id, event.event_id, event.event_type,
+        )

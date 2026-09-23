@@ -84,12 +84,8 @@ class OutingEventConsumer:
 
         self._store_offset(message)
         logger.info(
-            "Outing event processed: household=%s event_type=%s occurred_at=%s "
-            "state_applied=%s",
-            event.household_id,
-            event.event_type,
-            event.occurred_at.isoformat(),
-            applied,
+            "외출 메시지 소비 완료: 토픽=%s 가구=%s 이벤트=%s 유형=%s 상태반영=%s",
+            self._topic, event.household_id, event.event_id, event.event_type, applied,
         )
 
     def _publish_to_dlq(

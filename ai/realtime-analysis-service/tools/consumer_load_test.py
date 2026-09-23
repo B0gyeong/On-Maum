@@ -48,6 +48,7 @@ class LoadTestConfig:
     consumers: tuple[int, ...] = (1, 2, 4)
     houses: int = 40
     hz: float = 1.0
+    seed: int | None = None
     measurement_seconds: int = 300
     model_window_size: int = 299
     warmup_timeout_seconds: int = 1800
@@ -437,6 +438,8 @@ class ConsumerLoadTest:
             "0",
             "--quiet",
         ]
+        if self.config.seed is not None:
+            command.extend(["--seed", str(self.config.seed)])
         print(f"$ {' '.join(command)}", flush=True)
         try:
             self._simulator = subprocess.Popen(
@@ -814,6 +817,7 @@ class ConsumerLoadTest:
             "consumers": self.config.consumers,
             "houses": self.config.houses,
             "hz": self.config.hz,
+            "seed": self.config.seed,
             "expected_input_rate": self.config.expected_input_rate,
             "measurement_seconds": self.config.measurement_seconds,
             "model_window_size": self.config.model_window_size,
@@ -1016,6 +1020,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--consumers", type=parse_consumers, default=(1, 2, 4))
     parser.add_argument("--houses", type=int, default=40)
     parser.add_argument("--hz", type=float, default=1.0)
+    parser.add_argument("--seed", type=int, help="simulator random seed (0..2147483647)")
     parser.add_argument("--duration", type=int, default=300, dest="measurement_seconds")
     parser.add_argument("--model-window-size", type=int, default=299)
     parser.add_argument("--warmup-timeout", type=int, default=1800)
@@ -1049,6 +1054,8 @@ def config_from_args(args: argparse.Namespace) -> LoadTestConfig:
     invalid = [name for name, value in positive_fields.items() if value <= 0]
     if invalid:
         raise LoadTestError(f"options must be greater than zero: {', '.join(invalid)}")
+    if args.seed is not None and not 0 <= args.seed <= 2**31 - 1:
+        raise LoadTestError("seed must be between 0 and 2147483647")
     if args.restore_consumers < 0:
         raise LoadTestError("restore-consumers must be zero or greater")
     return LoadTestConfig(
@@ -1056,6 +1063,7 @@ def config_from_args(args: argparse.Namespace) -> LoadTestConfig:
         consumers=args.consumers,
         houses=args.houses,
         hz=args.hz,
+        seed=args.seed,
         measurement_seconds=args.measurement_seconds,
         model_window_size=args.model_window_size,
         warmup_timeout_seconds=args.warmup_timeout,

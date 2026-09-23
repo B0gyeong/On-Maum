@@ -25,6 +25,18 @@ public class Device {
             DeviceStatus.RETIRED, Set.of()
     );
 
+    /**
+     * MQTT 접속 상태 — {@link DeviceStatus}(생명주기)와 독립이다.
+     * 운영자가 정하는 것이 아니라 브로커가 알려 주는 사실이다.
+     */
+    public enum ConnectionStatus {
+        /** 한 번도 붙은 적 없음 */
+        UNKNOWN,
+        ONLINE,
+        /** LWT로 통지받았거나 정상 종료 — 데이터가 끊긴 이유가 기기 쪽임을 뜻한다 */
+        OFFLINE
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "device_id")
@@ -46,6 +58,17 @@ public class Device {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 15)
     private DeviceStatus status = DeviceStatus.REGISTERED;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "connection_status", nullable = false, length = 10)
+    private ConnectionStatus connectionStatus = ConnectionStatus.UNKNOWN;
+
+    /** 마지막으로 온라인을 확인한 시각. 오프라인이 되어도 지우지 않는다. */
+    @Column(name = "last_seen_at")
+    private OffsetDateTime lastSeenAt;
+
+    @Column(name = "connection_changed_at")
+    private OffsetDateTime connectionChangedAt;
 
     @Column(name = "registered_at", nullable = false, updatable = false, insertable = false)
     private OffsetDateTime registeredAt;
@@ -92,6 +115,41 @@ public class Device {
 
     public DeviceStatus getStatus() {
         return status;
+    }
+
+    /**
+     * 브로커가 알려 준 접속 상태를 반영한다.
+     *
+     * <p>같은 상태가 반복 통지되면 {@code connectionChangedAt}을 갱신하지 않는다.
+     * "언제부터 끊겨 있었나"를 알아야 하는데, 재통지마다 시각을 밀면 그 값이 사라진다.
+     *
+     * @return 상태가 실제로 바뀌었으면 true
+     */
+    public boolean updateConnection(ConnectionStatus next, OffsetDateTime at) {
+        if (next == null || at == null) {
+            throw new IllegalArgumentException("접속 상태와 시각은 필수입니다");
+        }
+        if (next == ConnectionStatus.ONLINE) {
+            this.lastSeenAt = at;
+        }
+        if (this.connectionStatus == next) {
+            return false;
+        }
+        this.connectionStatus = next;
+        this.connectionChangedAt = at;
+        return true;
+    }
+
+    public ConnectionStatus getConnectionStatus() {
+        return connectionStatus;
+    }
+
+    public OffsetDateTime getLastSeenAt() {
+        return lastSeenAt;
+    }
+
+    public OffsetDateTime getConnectionChangedAt() {
+        return connectionChangedAt;
     }
 
     public OffsetDateTime getRegisteredAt() {

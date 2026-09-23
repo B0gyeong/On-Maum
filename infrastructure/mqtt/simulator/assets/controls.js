@@ -35,6 +35,40 @@
       }
     }
 
+    // Seed 입력값 파싱: 빈칸이면 서버 자동 생성(seed: null), 그 외에는 0~2^31-1 정수만 허용
+    const SEED_MAX = 2147483647;
+    let currentSeed = null;
+
+    function parseSeedInput() {
+      const el = document.getElementById('seedInput');
+      const raw = (el && typeof el.value === 'string') ? el.value.trim() : '';
+      if (!raw) return { ok: true, seed: null };
+      if (!/^\d+$/.test(raw)) return { ok: false, seed: null };
+      const parsed = Number(raw);
+      if (!Number.isSafeInteger(parsed) || parsed > SEED_MAX) return { ok: false, seed: null };
+      return { ok: true, seed: parsed };
+    }
+
+    // 현재 실행 seed 표시 (재현하려면 이 값을 Seed 입력칸에 넣고 같은 가구/시나리오로 다시 시작)
+    function setCurrentSeed(seed) {
+      currentSeed = (typeof seed === 'number' && Number.isInteger(seed)) ? seed : null;
+      const label = document.getElementById('currentSeedLabel');
+      if (label) label.textContent = `현재 seed: ${currentSeed === null ? '-' : currentSeed}`;
+      const btn = document.getElementById('btnCopySeed');
+      if (btn) btn.disabled = (currentSeed === null);
+    }
+
+    async function copyCurrentSeed() {
+      if (currentSeed === null) return;
+      try {
+        await navigator.clipboard.writeText(String(currentSeed));
+      } catch (_) {
+        // 클립보드 권한이 없으면 입력칸에 채워 두어 수동 복사/재사용이 가능하게 한다.
+        const el = document.getElementById('seedInput');
+        if (el) el.value = String(currentSeed);
+      }
+    }
+
     // 다중 가구 통합 시뮬레이션 시작 핸들러
     async function startMultiSimulation() {
       const selected = [];
@@ -78,6 +112,26 @@
         effectiveFaultDuration = parsed;
       }
 
+      const startTimeEl = document.getElementById('startTimeInput');
+      const startTime = (startTimeEl && typeof startTimeEl.value === 'string') ? startTimeEl.value.trim() : '';
+      if (startTime) {
+        if (!/^\d{2}:\d{2}(:\d{2})?$/.test(startTime)) {
+          showNoticeError("시작 시각은 HH:MM 또는 HH:MM:SS 형식이어야 합니다.");
+          return;
+        }
+        if (selected.some(item => item.scenario === 'normal_routine' || item.scenario === 'routine_missed')) {
+          showNoticeError("정상 루틴/루틴 누락 시나리오는 시작 시각이 고정되어 있어 시작 시각을 지정할 수 없습니다. 시작 시각 칸을 비워 주세요.");
+          return;
+        }
+      }
+
+      const seedParse = parseSeedInput();
+      if (!seedParse.ok) {
+        showNoticeError("Seed는 0~2147483647 사이의 정수여야 합니다. 비워 두면 자동 생성됩니다.");
+        return;
+      }
+      const seedValue = seedParse.seed;
+
       if (!isServerConnected) {
         showNoticeError("백엔드 서버에 연결되어 있지 않습니다. 다중 가구 시뮬레이션은 서버 실행 상태에서만 가능합니다.");
         return;
@@ -98,6 +152,12 @@
         households: selected,
         interval: targetInterval
       };
+      if (seedValue !== null) {
+        payload.seed = seedValue;
+      }
+      if (startTime) {
+        payload.start_time = startTime;
+      }
       if (simDate && simDate.trim()) {
         payload.simulation_date = simDate.trim();
       }
@@ -154,6 +214,10 @@
         }
 
         isSimulationRunning = true;
+        try {
+          const startedData = await res.json();
+          setCurrentSeed(startedData ? startedData.seed : null);
+        } catch (_) { }
         connectServerStream();
       } catch (err) {
         isSimulationRunning = false;

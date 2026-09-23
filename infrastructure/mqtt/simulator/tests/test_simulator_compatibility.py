@@ -282,7 +282,11 @@ class TestSimulatorCompatibility(unittest.TestCase):
         self.assertEqual(phase, "COMPLETED", f"Duty cycle did not complete full loop within {max_ticks} ticks")
 
     def test_09_fixed_seed_baseline_exact_match(self):
-        """리팩터링 전(bcc5bdd) 고정 seed 42 baseline fixture와 재귀적 전수 비교 검증"""
+        """고정 seed 42 baseline fixture와 재귀적 전수 비교 검증
+
+        fixture는 리팩터링 전(bcc5bdd) 출력을 기준으로 만들었고, 2026-09-23 세션 가동 전력을
+        nominal_w 범위 난수 → median_w(EDA 실측 중앙값) 고정으로 바꾼 뒤 같은 스텝 시퀀스로 재생성했다.
+        """
         fixture_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "simulator_seed42_baseline.json")
         if not os.path.isfile(fixture_path):
             raise FileNotFoundError(f"Fixture 파일을 찾을 수 없습니다: {fixture_path}")
@@ -291,7 +295,7 @@ class TestSimulatorCompatibility(unittest.TestCase):
             fixture_doc = json.load(f)
 
         metadata = fixture_doc.get("metadata", {})
-        self.assertEqual(metadata.get("source_commit"), "bcc5bdd")
+        self.assertEqual(metadata.get("source_commit"), "922cbb3+median_w")
         self.assertEqual(metadata.get("random_seed"), 42)
         baseline_steps = fixture_doc["steps"]
 

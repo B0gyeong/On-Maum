@@ -130,6 +130,29 @@ class TestE2EApi(unittest.TestCase):
             urllib.request.urlopen(base + "/assets/unknown.js")
         self.assertEqual(unknown.exception.code, 404)
 
+    def test_routine_comparison_demo_is_served_with_local_assets(self):
+        """정상/이상 비교 시연 페이지와 전용 로컬 자산을 HTTP로 제공한다."""
+        base = f"http://127.0.0.1:{self.port}"
+        for page_path in ("/routine-demo", "/routine-demo.html"):
+            with self.subTest(path=page_path):
+                with urllib.request.urlopen(base + page_path) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertIn("text/html", response.headers["Content-Type"])
+                    html = response.read().decode("utf-8")
+                    self.assertIn("평소와 다른 아침", html)
+                    self.assertIn('id="normalChart"', html)
+                    self.assertIn('id="anomalyChart"', html)
+
+        for asset_path, expected_type in (
+            ("/assets/routine_demo.css", "text/css"),
+            ("/assets/routine_demo.js", "text/javascript"),
+        ):
+            with self.subTest(asset=asset_path):
+                with urllib.request.urlopen(base + asset_path) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertIn(expected_type, response.headers["Content-Type"])
+                    self.assertTrue(response.read())
+
     def test_css_referenced_images_are_served(self):
         """CSS가 url()로 참조하는 이미지도 HTTP로 제공되는지 확인한다.
 

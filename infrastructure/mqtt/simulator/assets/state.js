@@ -2,12 +2,12 @@
     // 1. 물리 엔진 및 6대 가전 프로파일 정의 (simulator.py와 100% 동일)
     // ==========================================
     const DEVICE_PROFILES = {
-      kettle: { name_ko: "전기포트", nominal_w: [1500, 1800], inrush_factor: 1.02, pf_nominal: [0.98, 1.00] },
-      induction: { name_ko: "인덕션", nominal_w: [1300, 1750], inrush_factor: 1.08, pf_nominal: [0.91, 0.95] },
-      iron: { name_ko: "전기다리미", nominal_w: [1200, 1550], inrush_factor: 1.02, pf_nominal: [0.98, 1.00] },
-      microwave: { name_ko: "전자레인지", nominal_w: [850, 1150], inrush_factor: 1.35, pf_nominal: [0.88, 0.94] },
-      hair_dryer: { name_ko: "헤어드라이기", nominal_w: [800, 1200], inrush_factor: 1.20, pf_nominal: [0.94, 0.98] },
-      vacuum_cleaner: { name_ko: "진공청소기", nominal_w: [700, 950], inrush_factor: 1.50, pf_nominal: [0.75, 0.85] }
+      kettle: { name_ko: "전기포트", nominal_w: [1500, 1800], median_w: 1657, inrush_factor: 1.02, pf_nominal: [0.98, 1.00] },
+      induction: { name_ko: "인덕션", nominal_w: [1300, 1750], median_w: 1463, inrush_factor: 1.08, pf_nominal: [0.91, 0.95] },
+      iron: { name_ko: "전기다리미", nominal_w: [1200, 1550], median_w: 1389, inrush_factor: 1.02, pf_nominal: [0.98, 1.00] },
+      microwave: { name_ko: "전자레인지", nominal_w: [850, 1150], median_w: 941, inrush_factor: 1.35, pf_nominal: [0.88, 0.94] },
+      hair_dryer: { name_ko: "헤어드라이기", nominal_w: [800, 1200], median_w: 934, inrush_factor: 1.20, pf_nominal: [0.94, 0.98] },
+      vacuum_cleaner: { name_ko: "진공청소기", nominal_w: [700, 950], median_w: 819, inrush_factor: 1.50, pf_nominal: [0.75, 0.85] }
     };
 
     // 다중 가구 지원 상태 관리

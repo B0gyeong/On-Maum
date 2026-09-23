@@ -1,6 +1,7 @@
 package com.nilm.device.api;
 
 import com.nilm.device.api.dto.DeviceDtos;
+import com.nilm.device.security.CurrentUser;
 import com.nilm.device.service.DeviceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,9 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class DeviceController {
 
     private final DeviceService deviceService;
+    private final CurrentUser currentUser;
 
-    public DeviceController(DeviceService deviceService) {
+    public DeviceController(DeviceService deviceService, CurrentUser currentUser) {
         this.deviceService = deviceService;
+        this.currentUser = currentUser;
     }
 
     @Operation(summary = "기기 등록",
@@ -33,7 +36,7 @@ public class DeviceController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public DeviceDtos.RegisterResponse register(@Valid @RequestBody DeviceDtos.RegisterRequest request) {
-        return deviceService.register(request, "system");
+        return deviceService.register(request, currentUser.id().toString());
     }
 
     @Operation(summary = "가구별 기기 목록 조회")
@@ -53,7 +56,7 @@ public class DeviceController {
     @PatchMapping("/{deviceId}/status")
     public DeviceDtos.Response changeStatus(@PathVariable Long deviceId,
                                             @Valid @RequestBody DeviceDtos.StatusChangeRequest request) {
-        return deviceService.changeStatus(deviceId, request);
+        return deviceService.changeStatus(deviceId, request, currentUser.id().toString());
     }
 
     @Operation(summary = "MQTT 계정 비밀번호 로테이션",
@@ -61,7 +64,7 @@ public class DeviceController {
                     + "브로커 반영은 /api/devices/admin/mqtt/sync 호출 필요. RETIRED 기기는 400.")
     @PostMapping("/{deviceId}/credentials/rotate")
     public DeviceDtos.CredentialRotateResponse rotateCredential(@PathVariable Long deviceId) {
-        return deviceService.rotateCredential(deviceId, "system");
+        return deviceService.rotateCredential(deviceId, currentUser.id().toString());
     }
 
     @Operation(summary = "기기 이력 조회")
