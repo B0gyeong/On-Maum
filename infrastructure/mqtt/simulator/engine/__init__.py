@@ -15,8 +15,11 @@ from .profiles import DEVICE_PROFILES
 from .state import (
     house_states,
     device_states,
+    house_rngs,
     init_simulation_states,
     set_manual_device_state,
+    get_house_rng,
+    resolve_seed,
 )
 from .power_model import (
     inject_peak_scenario_event,
@@ -98,8 +101,11 @@ __all__ = [
     "DEVICE_PROFILES",
     "house_states",
     "device_states",
+    "house_rngs",
     "init_simulation_states",
     "set_manual_device_state",
+    "get_house_rng",
+    "resolve_seed",
     "inject_peak_scenario_event",
     "inject_normal_routine_scenario_event",
     "update_house_environment",

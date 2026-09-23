@@ -142,6 +142,10 @@
 
       const faultDurInput = document.getElementById('faultDurationInput');
       if (faultDurInput) faultDurInput.disabled = !enabled;
+      const seedInput = document.getElementById('seedInput');
+      if (seedInput) seedInput.disabled = !enabled;
+      const startTimeInput = document.getElementById('startTimeInput');
+      if (startTimeInput) startTimeInput.disabled = !enabled;
 
       setSimulationDateInputEnabled(enabled);
     }

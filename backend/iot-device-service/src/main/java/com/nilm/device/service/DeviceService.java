@@ -27,6 +27,8 @@ public class DeviceService {
 
     /** 기기 발행 토픽 규칙 — MQTT 시뮬레이터·브릿지와 동일한 체계 */
     private static final String TOPIC_PATTERN = "v1/power/sim/%s/#";
+    /** 접속 상태(LWT) 토픽 — 기기 번호로 좁혀 남의 기기를 위장하지 못하게 한다 */
+    private static final String STATUS_TOPIC_PATTERN = "v1/device/%d/status";
 
     private final DeviceRepository deviceRepository;
     private final HouseholdRepository householdRepository;
@@ -75,11 +77,16 @@ public class DeviceService {
         String topic = TOPIC_PATTERN.formatted(request.houseId());
         aclRepository.save(new DeviceAcl(device.getDeviceId(), topic, DeviceAcl.Permission.PUBLISH));
 
+        // 접속 상태(LWT) 토픽 — 자기 기기 번호의 것만 쓸 수 있다.
+        // 남의 기기를 오프라인으로 위장하지 못하게 기기별로 좁힌다.
+        String statusTopic = STATUS_TOPIC_PATTERN.formatted(device.getDeviceId());
+        aclRepository.save(new DeviceAcl(device.getDeviceId(), statusTopic, DeviceAcl.Permission.PUBLISH));
+
         historyRepository.save(new InstallHistory(device.getDeviceId(),
                 InstallHistory.EventType.INSTALLED, null, request.location(), null, changedBy));
 
         return new DeviceDtos.RegisterResponse(
-                DeviceDtos.Response.from(device), username, plainPassword, List.of(topic));
+                DeviceDtos.Response.from(device), username, plainPassword, List.of(topic, statusTopic));
     }
 
     public DeviceDtos.Response get(Long deviceId) {
@@ -94,7 +101,8 @@ public class DeviceService {
 
     /** 상태 전이 — 도메인 규칙 위반 시 400, RETIRED 전이 시 MQTT 계정 자동 폐기. */
     @Transactional
-    public DeviceDtos.Response changeStatus(Long deviceId, DeviceDtos.StatusChangeRequest request) {
+    public DeviceDtos.Response changeStatus(Long deviceId, DeviceDtos.StatusChangeRequest request,
+                                            String changedBy) {
         Device device = findDevice(deviceId);
         DeviceStatus from = device.transitionTo(request.status());
 
@@ -102,7 +110,7 @@ public class DeviceService {
                 ? InstallHistory.EventType.RETIRED
                 : InstallHistory.EventType.STATUS_CHANGED;
         historyRepository.save(new InstallHistory(deviceId, eventType,
-                from.name(), request.status().name(), request.reason(), request.changedBy()));
+                from.name(), request.status().name(), request.reason(), changedBy));
 
         if (request.status() == DeviceStatus.RETIRED) {
             credentialRepository.findById(deviceId).ifPresent(DeviceCredential::revoke);

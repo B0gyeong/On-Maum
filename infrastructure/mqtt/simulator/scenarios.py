@@ -29,30 +29,30 @@ VOLTAGE_NOMINAL = 220.0
 VOLTAGE_RANGE = (212.0, 228.0)
 
 
-def create_initial_house_environment() -> dict:
-    """단일 가구의 초기 전압 및 대기전력 환경 상태 생성"""
+def create_initial_house_environment(rng=random) -> dict:
+    """단일 가구의 초기 전압 및 대기전력 환경 상태 생성 (rng: random.Random 또는 random 모듈)"""
     return {
-        "voltage": round(random.gauss(VOLTAGE_NOMINAL, 1.2), 1),
-        "base_nominal_w": random.uniform(*BASE_STANDBY_P_RANGE),
-        "base_current_w": random.uniform(45.0, 60.0),
-        "fridge_active": random.random() < 0.4,
-        "fridge_remaining_sec": random.randint(300, 1200),
-        "fridge_nominal_w": random.uniform(*FRIDGE_P_RANGE),
-        "fridge_pf": random.uniform(*FRIDGE_PF_RANGE),
+        "voltage": round(rng.gauss(VOLTAGE_NOMINAL, 1.2), 1),
+        "base_nominal_w": rng.uniform(*BASE_STANDBY_P_RANGE),
+        "base_current_w": rng.uniform(45.0, 60.0),
+        "fridge_active": rng.random() < 0.4,
+        "fridge_remaining_sec": rng.randint(300, 1200),
+        "fridge_nominal_w": rng.uniform(*FRIDGE_P_RANGE),
+        "fridge_pf": rng.uniform(*FRIDGE_PF_RANGE),
     }
 
 
-def update_standby_environment(env: dict) -> tuple[float, float, float]:
+def update_standby_environment(env: dict, rng=random) -> tuple[float, float, float]:
     """
     가구별 전압 드리프트(AR-1) 및 순수 대기전력 + 냉장고 주기 계산
     반환: (voltage, total_base_p, base_q)
     """
     # 1. 전압 AR-1 완만 드리프트
-    env["voltage"] = 0.98 * env["voltage"] + 0.02 * VOLTAGE_NOMINAL + random.gauss(0, 0.12)
+    env["voltage"] = 0.98 * env["voltage"] + 0.02 * VOLTAGE_NOMINAL + rng.gauss(0, 0.12)
     voltage = round(max(VOLTAGE_RANGE[0], min(VOLTAGE_RANGE[1], env["voltage"])), 1)
 
     # 2. 상시 대기전력의 완만한 변동 (Random Walk)
-    env["base_current_w"] = 0.96 * env["base_current_w"] + 0.04 * env["base_nominal_w"] + random.gauss(0, 0.2)
+    env["base_current_w"] = 0.96 * env["base_current_w"] + 0.04 * env["base_nominal_w"] + rng.gauss(0, 0.2)
     base_p = max(20.0, env["base_current_w"])
     base_pf = BASE_STANDBY_PF
 
@@ -61,12 +61,12 @@ def update_standby_environment(env: dict) -> tuple[float, float, float]:
     if env["fridge_remaining_sec"] <= 0:
         env["fridge_active"] = not env["fridge_active"]
         # 가동: 15~25분(900~1500초), 정지: 20~35분(1200~2100초)
-        env["fridge_remaining_sec"] = random.randint(900, 1500) if env["fridge_active"] else random.randint(1200, 2100)
+        env["fridge_remaining_sec"] = rng.randint(900, 1500) if env["fridge_active"] else rng.randint(1200, 2100)
 
     fridge_p = 0.0
     fridge_q = 0.0
     if env["fridge_active"]:
-        fridge_p = env["fridge_nominal_w"] + random.gauss(0, 0.8)
+        fridge_p = env["fridge_nominal_w"] + rng.gauss(0, 0.8)
         fridge_pf = env["fridge_pf"]
         fridge_q = fridge_p * math.sqrt(1.0 - fridge_pf * fridge_pf) / fridge_pf
 
@@ -512,6 +512,31 @@ def parse_simulation_start_time(start_time_str: str | None, is_missed_mode: bool
         return datetime(today.year, today.month, today.day, 8, 15, 0, tzinfo=KST)
 
     return None
+
+
+def resolve_fixed_start_time(
+    start_time: object,
+    simulation_date: str | date | None = None,
+    now: datetime | None = None,
+) -> datetime:
+    """
+    웹/API의 시작 시각 고정 옵션(start_time="HH:MM" 또는 "HH:MM:SS")을 KST aware datetime으로 변환한다.
+    날짜는 simulation_date, 없으면 오늘(KST). seed와 함께 쓰면 measured_at까지 매 실행 동일해진다.
+    """
+    if not isinstance(start_time, str) or not re.fullmatch(r"\d{2}:\d{2}(:\d{2})?", start_time.strip()):
+        raise ValueError(f"start_time은 HH:MM 또는 HH:MM:SS 형식의 문자열이어야 합니다: {start_time!r}")
+    h, m, s = _parse_time_parts(start_time.strip())
+
+    if simulation_date:
+        if isinstance(simulation_date, date):
+            target_date = simulation_date
+        else:
+            target_date = datetime.strptime(parse_simulation_date(simulation_date), "%Y-%m-%d").date()
+    else:
+        now_dt = datetime.now(KST) if now is None else now.astimezone(KST)
+        target_date = now_dt.date()
+
+    return datetime(target_date.year, target_date.month, target_date.day, h, m, s, tzinfo=KST)
 
 
 def resolve_multi_simulation_start_time(

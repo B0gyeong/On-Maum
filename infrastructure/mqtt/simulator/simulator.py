@@ -61,8 +61,11 @@ from engine.profiles import DEVICE_PROFILES
 from engine.state import (
     house_states,
     device_states,
+    house_rngs,
     init_simulation_states,
     set_manual_device_state,
+    get_house_rng,
+    resolve_seed,
 )
 from engine.power_model import (
     inject_peak_scenario_event,
@@ -100,6 +103,12 @@ def parse_args(args=None):
         type=int,
         default=120,
         help="센서 결측(고장) 지속 시간 (초, 1~3600, 기본값: 120)"
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="난수 seed (0~2147483647). 같은 seed + 같은 시나리오/가구면 계측값이 그대로 재현됨. 미지정 시 자동 생성 후 출력"
     )
     parser.add_argument(
         "--interval", "-i",
@@ -236,7 +245,12 @@ async def run_simulator(args):
     else:
         houses = [f"H{i:03d}" for i in range(1, args.houses + 1)]
 
-    init_simulation_states(houses)
+    try:
+        seed = resolve_seed(args.seed)
+    except ValueError as err:
+        print(f"[오류] {err}", file=sys.stderr)
+        sys.exit(1)
+    init_simulation_states(houses, seed=seed)
 
     # 2. 발행 주기(interval) 계산
     interval = (1.0 / args.hz) if args.hz and args.hz > 0 else max(0.001, args.interval)
@@ -318,6 +332,7 @@ async def run_simulator(args):
             print(f" - 목표 사이클: {target_count}회 발행 후 자동 종료 (총 {len(houses) * target_count}건)")
         else:
             print(f" - 실행 모드: 무한 연속 발행 (종료: Ctrl+C)")
+    print(f" - Seed: {seed} (재현: --seed {seed})")
     print(f"============================================================", flush=True)
 
     # sensor_fault 모드에서 base_dt가 없으면 시작 시각을 1회 고정하여

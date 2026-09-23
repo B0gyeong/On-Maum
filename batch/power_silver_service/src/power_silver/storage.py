@@ -92,10 +92,12 @@ class HdfsLakeStorage:
             return []
         found: list[FileStatus] = []
         for directory, _subdirs, files in self._client.walk(path, status=True):
+            # hdfs.Client.walk(status=True) returns (path, status) for directories.
+            directory_path = directory[0] if isinstance(directory, tuple) else directory
             for name, raw in files:
                 found.append(
                     FileStatus(
-                        f"{directory.rstrip('/')}/{name}",
+                        f"{directory_path.rstrip('/')}/{name}",
                         int(raw["length"]),
                         int(raw["modificationTime"]),
                     )

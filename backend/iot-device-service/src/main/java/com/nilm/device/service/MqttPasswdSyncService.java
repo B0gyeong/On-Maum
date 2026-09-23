@@ -47,6 +47,7 @@ public class MqttPasswdSyncService {
     private final Path passwdPath;
     private final Path aclPath;
     private final boolean reloadEnabled;
+    private final String staticAcl;
     private final List<String> reloadCommand;
 
     public MqttPasswdSyncService(
@@ -55,12 +56,14 @@ public class MqttPasswdSyncService {
             @Value("${app.mqtt.passwd-path:../../infrastructure/mqtt/config/passwd}") String passwdPath,
             @Value("${app.mqtt.acl-path:../../infrastructure/mqtt/config/acl.device}") String aclPath,
             @Value("${app.mqtt.reload-enabled:false}") boolean reloadEnabled,
+            @Value("${app.mqtt.static-acl:}") String staticAcl,
             @Value("${app.mqtt.reload-command:docker kill --signal=HUP mosquitto-broker}") String reloadCommand) {
         this.credentialRepository = credentialRepository;
         this.aclRepository = aclRepository;
         this.passwdPath = Path.of(passwdPath).toAbsolutePath().normalize();
         this.aclPath = Path.of(aclPath).toAbsolutePath().normalize();
         this.reloadEnabled = reloadEnabled;
+        this.staticAcl = staticAcl;
         this.reloadCommand = List.of(reloadCommand.split("\\s+"));
     }
 
@@ -112,15 +115,19 @@ public class MqttPasswdSyncService {
 
     /**
      * device_acl → mosquitto acl_file 형식으로 전체 재생성.
-     * 주의: 브로커 conf에 acl_file을 활성화하면 파일에 없는 사용자(simulator 등)는
-     * 모든 토픽이 차단되므로, 활성화 전에 공용 계정 항목을 별도 관리해야 한다. (README 참고)
+     *
+     * <p>mosquitto의 acl_file은 <b>파일에 없는 사용자의 모든 토픽을 막는다.</b>
+     * 기기가 아닌 공용 계정(시뮬레이터·브릿지)은 {@code device_acl}에 없으므로
+     * 여기서 정적 항목으로 먼저 써 준다. 이게 없으면 ACL을 켜는 순간
+     * 수집 파이프라인 전체가 끊긴다.
      */
     private int writeAclFile() throws IOException {
         List<com.nilm.device.repository.AclSyncRow> rows = aclRepository.findSyncTargets(SYNC_STATUSES);
         List<String> lines = new ArrayList<>();
         lines.add("# 이 파일은 iot-device-service가 DB에서 생성한다 — 직접 수정 금지");
+        lines.add("# 공용 계정은 app.mqtt.static-acl 설정에서, 기기 계정은 device_acl 테이블에서 온다.");
+        int entries = writeStaticAcl(lines);
         String currentUser = null;
-        int entries = 0;
         for (var row : rows) {
             if (!row.mqttUsername().equals(currentUser)) {
                 currentUser = row.mqttUsername();
@@ -134,6 +141,50 @@ public class MqttPasswdSyncService {
         }
         atomicWrite(aclPath, lines);
         log.info("ACL 동기화 완료: {}건 -> {}", entries, aclPath);
+        return entries;
+    }
+
+    /**
+     * 기기가 아닌 공용 계정의 ACL을 쓴다.
+     *
+     * <p>형식: {@code 사용자명:read|write:토픽} — 쉼표로 여러 개.
+     * 예: {@code simulator_user:write:v1/power/sim/#,kafka_bridge_user:read:v1/power/sim/#}
+     *
+     * <p>DB가 아니라 설정에 두는 이유는 이 계정들이 기기 생명주기를 따르지 않기 때문이다.
+     * 기기는 등록·정지·폐기되지만 브릿지는 인프라의 일부다.
+     */
+    private int writeStaticAcl(List<String> lines) {
+        if (staticAcl == null || staticAcl.isBlank()) {
+            return 0;
+        }
+        int entries = 0;
+        String currentUser = null;
+        for (String raw : staticAcl.split(",")) {
+            String rule = raw.trim();
+            if (rule.isEmpty()) {
+                continue;
+            }
+            String[] parts = rule.split(":", 3);
+            if (parts.length != 3) {
+                log.warn("static-acl 항목 형식이 잘못되어 건너뜁니다: {}", rule);
+                continue;
+            }
+            String user = parts[0].trim();
+            String access = parts[1].trim();
+            String topic = parts[2].trim();
+            if (!"read".equals(access) && !"write".equals(access) && !"readwrite".equals(access)) {
+                log.warn("static-acl 권한이 read/write/readwrite가 아니어서 건너뜁니다: {}", rule);
+                continue;
+            }
+            if (!user.equals(currentUser)) {
+                currentUser = user;
+                lines.add("");
+                lines.add("# 공용 계정 (설정 주입)");
+                lines.add("user " + user);
+            }
+            lines.add("topic " + access + " " + topic);
+            entries++;
+        }
         return entries;
     }
 

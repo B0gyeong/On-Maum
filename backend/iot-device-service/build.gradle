@@ -25,6 +25,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.springframework.kafka:spring-kafka'
+    // MQTT LWT 수신 — 기기가 끊겼을 때 브로커가 대신 보내는 유언 메시지를 받는다
+    implementation 'org.eclipse.paho:org.eclipse.paho.mqttv5.client:1.2.5'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'
     implementation 'org.flywaydb:flyway-core'
     runtimeOnly 'org.flywaydb:flyway-database-postgresql'

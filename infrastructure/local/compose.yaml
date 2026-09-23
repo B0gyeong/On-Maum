@@ -164,6 +164,8 @@ services:
     volumes:
       - ../mqtt/config/mosquitto.local.conf:/mosquitto/config/mosquitto.conf:ro
       - ../mqtt/config/passwd:/mosquitto/config/passwd:ro
+      # 인가 파일 — iot-device-service가 생성한다 (gitignore 대상)
+      - ../mqtt/config/acl.device:/mosquitto/config/acl.device:ro
       - mosquitto_data:/mosquitto/data
     logging:
       driver: json-file

@@ -25,7 +25,7 @@ import sys
 import time
 import unittest
 from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch, ANY
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SIMULATOR_DIR = os.path.dirname(TESTS_DIR)
@@ -314,7 +314,7 @@ class TestNormalRoutineH001Restriction(unittest.TestCase):
              patch("simulator.publish_house_power", new_callable=AsyncMock) as mock_pub:
             mock_pub.return_value = {"house": "H001", "power": 55.0, "devices": []}
             asyncio.run(simulator.run_simulator(args_default))
-            mock_init.assert_called_once_with(["H001"])
+            mock_init.assert_called_once_with(["H001"], seed=ANY)
 
         # 2. --scenario normal_routine --houses 1 (H001 단일 가구 실행)
         args_h1 = simulator.parse_args(["--scenario", "normal_routine", "--houses", "1"])
@@ -325,7 +325,7 @@ class TestNormalRoutineH001Restriction(unittest.TestCase):
              patch("simulator.publish_house_power", new_callable=AsyncMock) as mock_pub:
             mock_pub.return_value = {"house": "H001", "power": 55.0, "devices": []}
             asyncio.run(simulator.run_simulator(args_h1))
-            mock_init.assert_called_once_with(["H001"])
+            mock_init.assert_called_once_with(["H001"], seed=ANY)
 
         # 3. --scenario normal_routine --houses 2 (ValueError 발생)
         args_h2 = simulator.parse_args(["--scenario", "normal_routine", "--houses", "2"])
@@ -342,7 +342,7 @@ class TestNormalRoutineH001Restriction(unittest.TestCase):
              patch("simulator.publish_house_power", new_callable=AsyncMock) as mock_pub:
             mock_pub.return_value = {"house": "H001", "power": 55.0, "devices": []}
             asyncio.run(simulator.run_simulator(args_h10))
-            mock_init.assert_called_once_with(["H001"])
+            mock_init.assert_called_once_with(["H001"], seed=ANY)
 
         # 5. --scenario normal_routine --houses 11 (ValueError 발생)
         args_h11 = simulator.parse_args(["--scenario", "normal_routine", "--houses", "11"])

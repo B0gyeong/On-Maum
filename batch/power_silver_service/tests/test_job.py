@@ -14,6 +14,7 @@ from power_silver.constants import (
     OBSERVATION_INSUFFICIENT,
     OBSERVATION_SENSOR_GAP,
     OBSERVATION_VALID,
+    REJECT_MEASUREMENT_CONFLICT,
     REJECT_MESSAGE_CONFLICT,
     RUN_WAITING_INPUT,
 )
@@ -26,6 +27,7 @@ from conftest import (
     TARGET_DATE,
     bronze_rows,
     day_frame,
+    iso,
     write_bronze,
     write_targets,
 )
@@ -188,6 +190,63 @@ def test_the_same_message_id_with_different_content_is_quarantined(spark, harnes
 
     quarantined = harness.quarantine(result.run_id).collect()
     assert {row["reject_code"] for row in quarantined} == {REJECT_MESSAGE_CONFLICT}
+    assert len(quarantined) == 2
+
+
+def test_republishing_the_same_measurements_with_new_ids_is_deduplicated(spark, harness):
+    """시뮬레이터를 같은 측정시각으로 재실행하면 message_id와 offset이 모두 바뀐다."""
+    seconds = [DAY_START_EPOCH + offset for offset in range(10)]
+    original = bronze_rows(household_id="H001", seconds=seconds, first_offset=100)
+    rerun = bronze_rows(
+        household_id="H001",
+        seconds=seconds,
+        first_offset=500,
+        message_seed=1000,
+        ingested_at=iso(DAY_START_EPOCH + 3600, 0),
+    )
+    assert {row["message_id"] for row in original}.isdisjoint(
+        row["message_id"] for row in rerun
+    )
+    write_bronze(spark, harness.lake, harness.settings, original, name="a")
+    write_bronze(spark, harness.lake, harness.settings, rerun, name="a-rerun")
+
+    harness.run()
+    observation = harness.observation()["H001"]
+    assert observation["observed_slot_count"] == 10
+    assert observation["valid_measurement_count"] == 10
+    assert observation["duplicate_count"] == 10
+    assert observation["invalid_count"] == 0
+
+    kept = harness.power_clean().collect()
+    assert len(kept) == 10
+    # 수신시각이 앞선 최초 적재분이 남는다.
+    assert {row["kafka_offset"] for row in kept} == set(range(100, 110))
+
+
+def test_the_same_measurement_with_different_content_is_quarantined(spark, harness):
+    first = bronze_rows(
+        household_id="H001", seconds=[DAY_START_EPOCH], first_offset=1, active_power=100.0
+    )
+    second = bronze_rows(
+        household_id="H001",
+        seconds=[DAY_START_EPOCH],
+        first_offset=2,
+        message_seed=1000,
+        active_power=250.0,
+    )
+    assert first[0]["message_id"] != second[0]["message_id"]
+    write_bronze(spark, harness.lake, harness.settings, first + second, name="a")
+
+    result = harness.run()
+    assert harness.power_clean().count() == 0
+
+    observation = harness.observation()["H001"]
+    assert observation["invalid_count"] == 2
+    assert FLAG_MESSAGE_CONFLICT in observation["quality_flags"]
+    assert observation["observation_status"] == OBSERVATION_SENSOR_GAP
+
+    quarantined = harness.quarantine(result.run_id).collect()
+    assert {row["reject_code"] for row in quarantined} == {REJECT_MEASUREMENT_CONFLICT}
     assert len(quarantined) == 2
 
 

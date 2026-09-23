@@ -44,6 +44,7 @@ public class AnalysisEventService {
     private final NotificationGate notificationGate;
     private final AnalysisEventNarrator narrator;
     private final EventRoutingPolicy routing;
+    private final DeviceConnectivityService deviceConnectivity;
     private final RiskProperties riskProperties;
     private final ApplicationEventPublisher publisher;
     private final ObjectMapper objectMapper;
@@ -145,6 +146,16 @@ public class AnalysisEventService {
         if (occurredWhileAway && routing.suppressWhileAway(message.eventType())) {
             log.debug("외출 중 발생이라 알림을 억제한 이벤트: eventId={}, eventType={}",
                     message.eventId(), message.eventType());
+            return;
+        }
+
+        // 기기가 꺼져 있던 구간의 무활동은 사람에 대한 신호가 아니다.
+        // 구분하지 않으면 Wi-Fi가 끊길 때마다 보호자에게 위험 알림이 간다.
+        // 외출과 같은 기준으로 "사건이 일어난 시각"에 끊겨 있었는지를 본다.
+        if (routing.suppressWhileDeviceOffline(message.eventType())
+                && deviceConnectivity.wasDisconnectedAt(subject.getHouseholdId(), message.occurredAt())) {
+            log.info("기기 오프라인 구간의 이벤트라 알림을 억제: eventId={}, eventType={}, householdId={}",
+                    message.eventId(), message.eventType(), subject.getHouseholdId());
             return;
         }
         if (subject.getAuthSub() == null || subject.getAuthSub().isBlank()) {

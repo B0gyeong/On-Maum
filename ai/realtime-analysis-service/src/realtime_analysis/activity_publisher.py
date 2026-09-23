@@ -1,6 +1,7 @@
 """Kafka publisher for the daily activity index contract."""
 
 import json
+import logging
 from typing import Any
 
 from confluent_kafka import Producer
@@ -8,6 +9,7 @@ from confluent_kafka import Producer
 from realtime_analysis.config import Settings
 from realtime_analysis.schemas import ActivityIndexMessage
 
+logger = logging.getLogger(__name__)
 
 class ActivityIndexPublisher:
     def __init__(self, settings: Settings, producer: Producer | None = None) -> None:
@@ -40,3 +42,7 @@ class ActivityIndexPublisher:
             raise RuntimeError(
                 f"Activity index delivery failed: {delivery_errors[0]}"
             )
+        logger.info(
+            "활동 지수 메시지 발행 완료: 토픽=%s 가구=%s 날짜=%s",
+            self._topic, message.household_id, message.activity_date,
+        )

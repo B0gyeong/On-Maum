@@ -90,7 +90,7 @@
           if (st.state === "OFF" && Math.random() < 0.02) {
             st.state = "RUNNING";
             st.session_remaining = Math.floor(Math.random() * 15) + 10;
-            st.p = prof.nominal_w[0] + Math.random() * (prof.nominal_w[1] - prof.nominal_w[0]);
+            st.p = prof.median_w; // EDA 실측 중앙값 고정 (Python 엔진과 동일)
             st.pf = prof.pf_nominal[0];
             addEventRow(sec, "가전 켜짐", prof.name_ko, `${st.p.toFixed(0)} W`, "랜덤 동작");
           } else if (st.state === "RUNNING") {

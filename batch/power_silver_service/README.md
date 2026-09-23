@@ -109,7 +109,7 @@ manifest는 **저장 완료의 증거이지 그날 모든 센서 데이터가 �
 
 격리 사유: `INVALID_MESSAGE_ID`, `INVALID_HOUSEHOLD_ID`, `INVALID_DEVICE_ID`,
 `INVALID_MEASURED_AT`, `FUTURE_MEASURED_AT`, `INVALID_NUMBER`, `OUT_OF_RANGE`,
-`KAFKA_RECORD_CONFLICT`, `MESSAGE_CONFLICT`.
+`KAFKA_RECORD_CONFLICT`, `MESSAGE_CONFLICT`, `MEASUREMENT_CONFLICT`.
 
 설정에 없는 가구의 측정값은 **격리하지 않고** `power_clean`에 남긴다(유효한 측정이다).
 관측일 결과에는 들어가지 않고, 실행 통계에만 나타난다.
@@ -120,10 +120,12 @@ manifest는 **저장 완료의 증거이지 그날 모든 센서 데이터가 �
 |---|---|---|
 | 물리 중복 | `topic + partition + kafka_offset` | Kafka 레코드의 반복 적재 제거 |
 | 논리 중복 | `message_id` | 생산자 재전송 제거 |
+| 측정 중복 | `household_id + device_id + measured_at_utc` | 같은 측정의 재발행 제거(시뮬레이터 재실행 등) |
 
 같은 키의 내용이 같으면 하나만 남긴다. **내용이 다르면 임의의 한 행을 고르지 않고 충돌
 그룹 전체를 격리한다.** 보존 행은 `(수신시각, 입력 파일, 파티션, offset)` 순서로 정해
-노드 수가 달라도 같은 행이 남는다.
+노드 수가 달라도 같은 행이 남는다. 측정 중복은 `message_id`가 달라도 잡히므로, 같은
+측정시각을 새 ID로 다시 발행한 재실행분은 최초 적재분만 남고 나머지는 `DUPLICATE`가 된다.
 
 ## 5. 관측일 계산
 

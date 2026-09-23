@@ -27,6 +27,7 @@ from power_silver.constants import (
     OBSERVATION_SENSOR_GAP,
     OBSERVATION_VALID,
     REJECT_KAFKA_RECORD_CONFLICT,
+    REJECT_MEASUREMENT_CONFLICT,
     REJECT_MESSAGE_CONFLICT,
 )
 from power_silver.deduplicate import STATE_CLEAN, STATE_DUPLICATE, STATE_REJECTED
@@ -198,7 +199,9 @@ def observation_daily(
         F.count(
             F.when(
                 F.col("reject_code").isin(
-                    REJECT_MESSAGE_CONFLICT, REJECT_KAFKA_RECORD_CONFLICT
+                    REJECT_MESSAGE_CONFLICT,
+                    REJECT_KAFKA_RECORD_CONFLICT,
+                    REJECT_MEASUREMENT_CONFLICT,
                 ),
                 1,
             )

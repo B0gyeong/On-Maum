@@ -1,6 +1,7 @@
 """analysis.snapshot.v1 Kafka Publisher."""
 
 import json
+import logging
 from typing import Any
 
 from confluent_kafka import Producer
@@ -8,6 +9,7 @@ from confluent_kafka import Producer
 from realtime_analysis.config import Settings
 from realtime_analysis.schemas import AnalysisSnapshot
 
+logger = logging.getLogger(__name__)
 
 class AnalysisSnapshotPublisher:
     """가구별 최신 분석 Snapshot을 Kafka에 발행한다."""
@@ -48,3 +50,7 @@ class AnalysisSnapshotPublisher:
             raise RuntimeError(
                 f"Analysis snapshot delivery failed: {delivery_errors[0]}"
             )
+        logger.info(
+            "분석 메시지 발행 완료: 토픽=%s 가구=%s 스냅샷=%s",
+            self._topic, payload["household_id"], payload.get("snapshot_id", "없음"),
+        )

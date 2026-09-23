@@ -40,6 +40,9 @@ def validate_power_clean(
     summary = frame.agg(
         F.count(F.lit(1)).alias("rows"),
         F.countDistinct("message_id").alias("distinct_messages"),
+        F.countDistinct("household_id", "device_id", "measured_at_utc").alias(
+            "distinct_measurements"
+        ),
         F.sum(F.when(F.col("event_date") != F.lit(target_date), 1).otherwise(0)).alias(
             "wrong_date"
         ),
@@ -59,6 +62,11 @@ def validate_power_clean(
         raise OutputInvalid(
             f"power_clean has duplicate message_id rows: "
             f"{row_count - summary['distinct_messages']}"
+        )
+    if summary["distinct_measurements"] != row_count:
+        raise OutputInvalid(
+            f"power_clean has duplicate (household, device, measured_at) rows: "
+            f"{row_count - summary['distinct_measurements']}"
         )
     if summary["wrong_date"]:
         raise OutputInvalid(

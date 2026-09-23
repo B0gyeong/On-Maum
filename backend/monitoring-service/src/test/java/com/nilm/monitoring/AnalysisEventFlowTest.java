@@ -61,7 +61,8 @@ class AnalysisEventFlowTest {
         // analysis.event.v1(이상 징후), analysis.snapshot.v1(가전 ON/OFF),
         // gold.household-profile.v1(생활 프로필), device.manager-registered.v1(담당자 가입)
         // 네 개를 구독한다.
-        assertThat(listeners.getListenerContainers()).hasSize(4);
+        // 분석 이벤트·스냅샷·생활 프로필·담당자 가입·기기 접속
+        assertThat(listeners.getListenerContainers()).hasSize(5);
         assertThat(context.getBeansOfType(WebPushSender.class)).isEmpty();
         assertThat(listeners.getListenerContainers()).allMatch(c -> !c.isRunning());
     }
