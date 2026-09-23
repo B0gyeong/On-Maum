@@ -1028,6 +1028,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--assignment-timeout", type=int, default=180)
     parser.add_argument("--poll-seconds", type=float, default=5.0)
     parser.add_argument("--prometheus-url", default="http://localhost:19090")
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        help="repository root holding infrastructure/; inferred from this file's location when omitted",
+    )
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument(
@@ -1039,8 +1044,24 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def default_repo_root(tool_path: Path | None = None) -> Path:
+    """Infer the repository root from this file's location inside the repo.
+
+    The tool lives at <repo>/ai/realtime-analysis-service/tools/, so the root is three
+    directories up. Outside that layout (e.g. copied into a container as /app/tools)
+    there is no such ancestor, so fail with a hint instead of an IndexError.
+    """
+    here = (tool_path or Path(__file__)).resolve()
+    parents = here.parents
+    if len(parents) <= 3 or not (parents[3] / "infrastructure").is_dir():
+        raise LoadTestError(
+            "cannot infer the repository root from "
+            f"{here}; pass --repo-root explicitly"
+        )
+    return parents[3]
+
+
 def config_from_args(args: argparse.Namespace) -> LoadTestConfig:
-    repo_root = Path(__file__).resolve().parents[3]
     positive_fields = {
         "houses": args.houses,
         "hz": args.hz,
@@ -1058,6 +1079,7 @@ def config_from_args(args: argparse.Namespace) -> LoadTestConfig:
         raise LoadTestError("seed must be between 0 and 2147483647")
     if args.restore_consumers < 0:
         raise LoadTestError("restore-consumers must be zero or greater")
+    repo_root = args.repo_root.resolve() if args.repo_root is not None else default_repo_root()
     return LoadTestConfig(
         repo_root=repo_root,
         consumers=args.consumers,
