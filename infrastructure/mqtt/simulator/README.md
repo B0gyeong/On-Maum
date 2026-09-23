@@ -149,6 +149,7 @@ python simulator.py --help
 | `--scenario` | `-s` | `random` | 실행 시나리오 모드 (`random`: 연속 확률, `peak`: 10초 피크, `routine_missed`: 08:10 루틴 누락 이상치, `normal_routine`: H001 정상 일상 루틴, `sensor_fault`: 가변 센서 고장 결측) |
 | `--date` | `-d` | `None` | 가상 기준 날짜 (`YYYY-MM-DD`). 미지정 시 오늘 날짜 사용 |
 | `--houses` | `-n` | `10` | 대상 가구 수 (`H001` ~ `H{n:03d}`) |
+| `--seed` | | `None` | 난수 seed (0~2147483647). 같은 seed로 다시 실행하면 계측값이 그대로 재현됨. 미지정 시 자동 생성 후 시작 로그에 출력 |
 | `--fault-duration-sec` | | `120` | `sensor_fault` 결측 지속 시간 (초 단위, 1~3600 범위 정수, 기본값: 120) |
 | `--interval` | `-i` | `1.0` | 데이터 발행 주기 (초 단위) |
 | `--hz` | | `None` | 가구당 초당 측정 횟수 (지정 시 `interval = 1/hz` 자동 환산) |
@@ -353,6 +354,23 @@ python web_server.py \
 * **실시간 가전 칩 패널**: 6대 가전의 실시간 ON/OFF 상태 및 소비전력 표시 (`normal_routine` 가동 중 전자레인지 칩 ON 활성화 및 종료 시 OFF 복귀)
 * **CSV 내보내기**: 시뮬레이션된 시계열 데이터를 엑셀 호환 UTF-8 BOM CSV 파일로 즉시 저장
 * **고급 설정 (접이식 UI)**: 다중 가구 동시 설정 테이블 및 기존 개발자 전용 프리셋(피크, 종합, 전체 랜덤, 수동 제어 등)은 `<details>` 영역으로 깔끔하게 접혀 있어 발표 시연에 집중할 수 있습니다.
+
+### (2-1) Seed로 랜덤 실행 재현
+
+실시간 경로(`/api/start`, `simulator.py`)는 가구마다 `random.Random(f"{seed}:{house}")`를 따로 만들어 초기 환경과 매 틱 난수를 뽑습니다.
+랜덤 모드에서 흥미로운 파형이 나왔다면 그 실행의 seed로 다시 시작해 같은 값을 다시 볼 수 있습니다.
+
+* **웹**: 제어 바의 `Seed` 입력칸을 비우고 시작하면 서버가 seed를 생성해 `현재 seed`에 표시합니다. 그 값을 입력칸에 넣고 같은 가구/시나리오로 다시 시작하면 재현됩니다.
+* **API**: `POST /api/start`의 최상위 `seed`(0~2147483647 정수, 생략/null이면 자동 생성). 응답과 `GET /api/status`에 `seed`가 포함됩니다. 범위 밖이거나 정수가 아니면 400을 반환합니다.
+* **CLI**: `python simulator.py --scenario random --seed 12345`
+* **시작 시각 고정**: 웹의 `시작 시각` 입력칸 또는 `/api/start`의 `start_time`(`"HH:MM"`/`"HH:MM:SS"`, KST)을 지정하면 기준 날짜(`simulation_date`, 없으면 오늘)의 그 시각부터 시작합니다. CLI는 기존 `--start-time`을 사용합니다. `normal_routine`/`routine_missed`는 시작 시각이 시나리오에 고정되어 있어 지정 시 400을 반환합니다.
+
+재현 조건과 한계:
+* 같은 seed + 같은 가구 + 같은 시나리오(`sensor_fault`는 같은 `fault_duration_sec`)이면 틱별 P, Q, S, PF, V, I, 동작 가전이 동일합니다. 가구별로 난수가 독립이라 다른 가구를 함께 돌리는지와 무관합니다.
+* 배속, 일시정지, 발행 주기는 값에 영향을 주지 않습니다 (틱 번호 기준으로 생성).
+* 시작 시각을 고정하지 않으면 `measured_at`은 실제 시작 시각 기반이라 실행마다 달라집니다. seed + 기준 날짜 + 시작 시각을 모두 고정하면 `measured_at`까지 동일합니다.
+* `message_id`는 실행마다 달라집니다.
+* 실행 중 가전을 수동으로 ON/OFF하면 그 이후 값은 재현되지 않습니다.
 
 ### (3) 시뮬레이션 기준 날짜 선택 및 가상 시각 제어 (New)
 

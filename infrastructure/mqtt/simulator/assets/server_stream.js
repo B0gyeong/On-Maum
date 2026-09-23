@@ -58,6 +58,9 @@
           // 서버 상태 동기화
           isSimulationRunning = Boolean(data.is_running);
           isPaused = Boolean(data.is_paused);
+          if (typeof setCurrentSeed === 'function' && typeof data.seed === 'number') {
+            setCurrentSeed(data.seed);
+          }
 
           if (typeof data.interval === 'number' && data.interval > 0) {
             const serverMs = Math.round(data.interval * 1000);

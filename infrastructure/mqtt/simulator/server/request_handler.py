@@ -457,11 +457,34 @@ class RequestHandler(BaseHTTPRequestHandler):
                     return
                 fault_duration_sec = raw_fds
 
+            # seed 선택 필드 엄격 검증 (null/미지정이면 서버가 생성)
+            seed = None
+            if "seed" in params and params["seed"] is not None:
+                try:
+                    seed = simulator.resolve_seed(params["seed"])
+                except ValueError as err:
+                    self.send_error_json(400, "BAD_REQUEST", f"잘못된 seed 필드입니다: {err}")
+                    return
+
+            # start_time 선택 필드 엄격 검증 ("HH:MM" / "HH:MM:SS", KST)
+            start_time = None
+            if "start_time" in params and params["start_time"] is not None:
+                try:
+                    scenarios.resolve_fixed_start_time(params["start_time"], simulation_date=simulation_date)
+                except ValueError as err:
+                    self.send_error_json(400, "BAD_REQUEST", f"잘못된 start_time 필드입니다: {err}")
+                    return
+                start_time = params["start_time"].strip()
+
             kwargs = {}
             if interval is not None:
                 kwargs["interval"] = interval
             if fault_duration_sec is not None:
                 kwargs["fault_duration_sec"] = fault_duration_sec
+            if seed is not None:
+                kwargs["seed"] = seed
+            if start_time is not None:
+                kwargs["start_time"] = start_time
 
             with self.shared_start_lock:
                 if self.e2e_manager is not None and self.e2e_manager.is_active():
@@ -498,6 +521,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                     }
                     if "fault_duration_sec" in started_info:
                         resp_payload["fault_duration_sec"] = started_info["fault_duration_sec"]
+                    if "seed" in started_info:
+                        resp_payload["seed"] = started_info["seed"]
                     self.send_json(200, resp_payload)
                 except ValueError as err:
                     err_msg = str(err)

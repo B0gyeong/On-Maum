@@ -62,6 +62,7 @@ class SimulatorManager:
         self.current_mode = "idle"  # 단일 가구는 해당 시나리오, 다중 가구는 "multi", 정지 시 "idle"
         self.simulation_date = None
         self.resolved_start_time = None
+        self.seed = None  # 현재 실행의 난수 seed (같은 seed로 재시작하면 계측값이 재현됨)
         # 실행별로 별도 Event를 생성해 종료된 워커가 다시 살아나는 것을 막는다.
         self.stop_event = None
         self.worker_thread = None
@@ -132,6 +133,8 @@ class SimulatorManager:
         households: list[dict] | None = None,
         interval: float | None = None,
         fault_duration_sec: int | None = None,
+        seed: int | None = None,
+        start_time: str | None = None,
     ) -> dict:
         """시뮬레이션을 시작합니다. 단일 가구 위치 인자 및 다중 가구 households keyword-only를 모두 지원합니다."""
         with self.lifecycle_lock:
@@ -178,6 +181,13 @@ class SimulatorManager:
                     routine_default_time="08:10:01"
                 )
 
+            # 3-0. 시작 시각 고정: 지정 시 선택 날짜(없으면 오늘) + start_time(KST)으로 base_dt를 덮어쓴다.
+            #      루틴 시나리오는 타임라인이 시작 시각에 묶여 있으므로 허용하지 않는다.
+            if start_time is not None:
+                if has_normal or has_missed:
+                    raise ValueError("normal_routine/routine_missed 시나리오는 시작 시각이 고정되어 있어 start_time을 지정할 수 없습니다.")
+                base_dt = scenarios.resolve_fixed_start_time(start_time, simulation_date=simulation_date)
+
             resolved_start_iso = scenarios.format_iso_utc(base_dt) if base_dt else None
 
             # 3-A. interval 사전 검증: 기존 워커를 중지하기 전에 검증하여 잘못된 interval 시 기존 워커를 보호한다.
@@ -199,6 +209,9 @@ class SimulatorManager:
             else:
                 effective_fault_duration = scenarios.SensorFaultScenario.DEFAULT_FAULT_DURATION_SEC if has_sensor_fault else None
 
+            # 3-C. seed 사전 검증 및 생성: 기존 워커를 중지하기 전에 검증한다.
+            effective_seed = simulator.resolve_seed(seed)
+
             # 각 가구 설정에 fault_duration_sec 바인딩
             for h in normalized_households:
                 if h["scenario"] == "sensor_fault":
@@ -210,7 +223,7 @@ class SimulatorManager:
             # 4. 이전 워커가 완전히 종료된 후, simulation_lock 안에서 대상 가구들의 상태 머신 초기화
             target_houses = [h["house"] for h in normalized_households]
             with self.simulation_lock:
-                simulator.init_simulation_states(target_houses)
+                simulator.init_simulation_states(target_houses, seed=effective_seed)
 
             stop_event = threading.Event()
             worker_thread = threading.Thread(
@@ -233,6 +246,7 @@ class SimulatorManager:
                 self.cycle_count = 0
                 self.simulation_date = simulation_date
                 self.resolved_start_time = resolved_start_iso
+                self.seed = effective_seed
                 self.active_households = {
                     h["house"]: {
                         "scenario": h["scenario"],
@@ -255,6 +269,7 @@ class SimulatorManager:
                 "resolved_start_time": resolved_start_iso,
                 "interval": effective_interval,
                 "speed": round(1.0 / effective_interval, 2),
+                "seed": effective_seed,
             }
             if has_sensor_fault:
                 resp["fault_duration_sec"] = effective_fault_duration
@@ -330,6 +345,7 @@ class SimulatorManager:
                 self.last_metrics = None
                 self.simulation_date = None
                 self.resolved_start_time = None
+                self.seed = None
                 self.global_cycle_count = 0
                 self.cycle_count = 0
                 self.is_paused = False
@@ -357,6 +373,7 @@ class SimulatorManager:
                     "last_metrics": copy.deepcopy(self.last_metrics) if self.last_metrics else None,
                     "simulation_date": self.simulation_date,
                     "resolved_start_time": self.resolved_start_time,
+                    "seed": self.seed,
                 }
 
     def stop(self):

@@ -7,6 +7,7 @@ house_states와 device_states는 단일 공유 dict 객체로 유지되며,
 """
 
 import random
+import secrets
 
 from .profiles import DEVICE_PROFILES
 
@@ -21,16 +22,46 @@ except ModuleNotFoundError:
 # ==========================================
 house_states = {}
 device_states = {}
+# seed 지정 시 가구별 독립 난수 생성기 (비어 있으면 전역 random 모듈 사용)
+house_rngs = {}
+
+SEED_MIN = 0
+SEED_MAX = 2**31 - 1
 
 
-def init_simulation_states(houses: list[str]):
-    """가구 목록에 맞추어 시계열 환경 및 가전 상태 머신 초기화"""
+def resolve_seed(seed: int | None) -> int:
+    """seed를 검증해 반환하고, None이면 새 seed를 생성한다 (0 ~ 2^31-1 정수, bool 거부)"""
+    if seed is None:
+        return secrets.randbelow(SEED_MAX + 1)
+    if type(seed) is not int:
+        raise ValueError(f"seed는 {SEED_MIN}~{SEED_MAX} 범위의 정수여야 합니다: {seed!r}")
+    if not (SEED_MIN <= seed <= SEED_MAX):
+        raise ValueError(f"seed는 {SEED_MIN}~{SEED_MAX} 범위의 정수여야 합니다: {seed}")
+    return seed
+
+
+def get_house_rng(house: str):
+    """가구 전용 random.Random을 반환하고, seed 미지정 실행이면 전역 random 모듈을 반환"""
+    return house_rngs.get(house, random)
+
+
+def init_simulation_states(houses: list[str], seed: int | None = None):
+    """
+    가구 목록에 맞추어 시계열 환경 및 가전 상태 머신 초기화
+
+    seed가 int이면 가구마다 random.Random(f"{seed}:{house}")를 만들어 초기 환경과 이후 모든 틱 난수에 사용한다.
+    같은 seed + 같은 가구는 다른 가구 구성이나 전역 random 사용 여부와 무관하게 같은 값을 재현한다.
+    """
     house_states.clear()
     device_states.clear()
+    house_rngs.clear()
 
     for house in houses:
+        if seed is not None:
+            house_rngs[house] = random.Random(f"{seed}:{house}")
+
         # 1) 가구별 시계열 대기전력 환경 상태 (전압 AR-1 드리프트, 기본 대기전력, 냉장고 주기)
-        house_states[house] = create_initial_house_environment()
+        house_states[house] = create_initial_house_environment(rng=get_house_rng(house))
 
         # 2) 가구별 가전 상태 머신 객체
         device_states[house] = {}
@@ -63,18 +94,19 @@ def set_manual_device_state(house: str, device: str, enabled: bool) -> dict:
 
     profile = DEVICE_PROFILES[device]
     state = device_states[house][device]
+    rng = get_house_rng(house)
 
     if enabled:
         if state["state"] == "OFF":
             state["state"] = "STARTING"
             state["manual_hold"] = True
-            state["nominal_w"] = random.uniform(*profile["nominal_w"])
-            state["nominal_pf"] = random.uniform(*profile["pf_nominal"])
+            state["nominal_w"] = rng.uniform(*profile["nominal_w"])
+            state["nominal_pf"] = rng.uniform(*profile["pf_nominal"])
             state["inrush_remaining"] = profile["inrush_sec"]
-            state["session_remaining"] = random.randint(*profile["session_sec"])
+            state["session_remaining"] = rng.randint(*profile["session_sec"])
             if profile["type"] == "duty_cycle":
                 state["is_heating"] = True
-                state["duty_remaining"] = random.randint(*profile["duty_on_sec"])
+                state["duty_remaining"] = rng.randint(*profile["duty_on_sec"])
             else:
                 state["is_heating"] = False
                 state["duty_remaining"] = 0

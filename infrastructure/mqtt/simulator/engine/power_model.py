@@ -6,10 +6,9 @@ NILM 스마트홈 전력 시뮬레이터 물리 엔진 및 전력 모델링 모�
 """
 
 import math
-import random
 
 from .profiles import DEVICE_PROFILES
-from .state import house_states, device_states
+from .state import house_states, device_states, get_house_rng
 
 try:
     from scenarios import (
@@ -38,7 +37,7 @@ def inject_normal_routine_scenario_event(cycle_sec: int, house: str) -> str | No
 
 def update_house_environment(house: str) -> tuple[float, float, float]:
     """가구별 전압(V) 드리프트 및 순수 대기전력 + 냉장고 컴프레서 주기 계산"""
-    return update_standby_environment(house_states[house])
+    return update_standby_environment(house_states[house], rng=get_house_rng(house))
 
 
 def update_and_generate_device_load(house: str, device: str, allow_random: bool = True) -> tuple[float, float, bool]:
@@ -48,21 +47,22 @@ def update_and_generate_device_load(house: str, device: str, allow_random: bool 
     """
     profile = DEVICE_PROFILES[device]
     state = device_states[house][device]
+    rng = get_house_rng(house)
 
     if state["state"] == "OFF":
         # 가전 켜짐 트리거 확인 (랜덤 트리거 허용 시에만 자동 켜짐)
-        if allow_random and random.random() < profile["turn_on_prob"]:
+        if allow_random and rng.random() < profile["turn_on_prob"]:
             dur_min, dur_max = profile["session_sec"]
-            state["session_remaining"] = random.randint(dur_min, dur_max)
-            state["nominal_w"] = random.uniform(*profile["nominal_w"])
-            state["nominal_pf"] = random.uniform(*profile["pf_nominal"])
+            state["session_remaining"] = rng.randint(dur_min, dur_max)
+            state["nominal_w"] = rng.uniform(*profile["nominal_w"])
+            state["nominal_pf"] = rng.uniform(*profile["pf_nominal"])
             state["state"] = "STARTING"
             state["manual_hold"] = False
             state["inrush_remaining"] = profile["inrush_sec"]
 
             if profile["type"] == "duty_cycle":
                 state["is_heating"] = True
-                state["duty_remaining"] = random.randint(*profile["duty_on_sec"])
+                state["duty_remaining"] = rng.randint(*profile["duty_on_sec"])
 
     p = 0.0
     pf = 0.95
@@ -71,7 +71,7 @@ def update_and_generate_device_load(house: str, device: str, allow_random: bool 
     if state["state"] == "STARTING":
         is_active = True
         # 1. 돌입전류(Inrush / Overshoot) 단계: 피크 전력 + 순간 역률 저하
-        p = state["nominal_w"] * profile["inrush_factor"] + random.gauss(0, 2.0)
+        p = state["nominal_w"] * profile["inrush_factor"] + rng.gauss(0, 2.0)
         pf = max(0.40, state["nominal_pf"] - 0.08)
 
         state["inrush_remaining"] -= 1
@@ -93,32 +93,32 @@ def update_and_generate_device_load(house: str, device: str, allow_random: bool 
             if profile["type"] == "single_block":
                 # 2-A. 단일 구형파 블록: 정격 전력 유지 + 미세 변동
                 is_active = True
-                p = state["nominal_w"] + random.gauss(0, 1.2)
-                pf = state["nominal_pf"] + random.gauss(0, 0.003)
+                p = state["nominal_w"] + rng.gauss(0, 1.2)
+                pf = state["nominal_pf"] + rng.gauss(0, 0.003)
 
             elif profile["type"] == "duty_cycle":
                 # 2-B. 듀티 사이클: 서모스탯 제어 (가열 ON ↔ 휴지 OFF)
                 state["duty_remaining"] -= 1
                 if state["is_heating"]:
                     is_active = True
-                    p = state["nominal_w"] + random.gauss(0, 1.5)
+                    p = state["nominal_w"] + rng.gauss(0, 1.5)
                     pf = state["nominal_pf"]
                     if state["duty_remaining"] <= 0:
                         state["is_heating"] = False
-                        state["duty_remaining"] = random.randint(*profile["duty_off_sec"])
+                        state["duty_remaining"] = rng.randint(*profile["duty_off_sec"])
                 else:
                     # 휴지 구간: 내부 대기전력만 소모
                     is_active = True  # 세션 가동 중
-                    p = profile["standby_w"][1] + random.uniform(5.0, 15.0)
+                    p = profile["standby_w"][1] + rng.uniform(5.0, 15.0)
                     pf = 0.92
                     if state["duty_remaining"] <= 0:
                         state["is_heating"] = True
-                        state["duty_remaining"] = random.randint(*profile["duty_on_sec"])
+                        state["duty_remaining"] = rng.randint(*profile["duty_on_sec"])
 
     if state["state"] == "OFF":
         # 3. 완전 대기 상태
         low, high = profile["standby_w"]
-        p = random.uniform(low, high) if high > 0 else 0.0
+        p = rng.uniform(low, high) if high > 0 else 0.0
         pf = 0.95
 
     p = max(0.0, p)
@@ -146,8 +146,9 @@ def calculate_main_panel_metrics(house: str, allow_random: bool = True) -> dict:
             active_devices.append(DEVICE_PROFILES[device]["name_ko"])
 
     # 3. 분전반 메인 계측기 미세 센서 노이즈
-    total_p += random.gauss(0, 0.8)
-    total_q += random.gauss(0, 0.8)
+    rng = get_house_rng(house)
+    total_p += rng.gauss(0, 0.8)
+    total_q += rng.gauss(0, 0.8)
     total_p = max(0.0, total_p)
     total_q = max(0.0, total_q)
 
