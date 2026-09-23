@@ -100,7 +100,7 @@ def set_manual_device_state(house: str, device: str, enabled: bool) -> dict:
         if state["state"] == "OFF":
             state["state"] = "STARTING"
             state["manual_hold"] = True
-            state["nominal_w"] = rng.uniform(*profile["nominal_w"])
+            state["nominal_w"] = profile["median_w"]  # EDA 실측 중앙값 고정
             state["nominal_pf"] = rng.uniform(*profile["pf_nominal"])
             state["inrush_remaining"] = profile["inrush_sec"]
             state["session_remaining"] = rng.randint(*profile["session_sec"])

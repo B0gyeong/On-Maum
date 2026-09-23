@@ -20,7 +20,10 @@
       </div>
       <p>스마트홈 메인 분전반 교류 전력(P, Q, S, PF, V, I) 실시간 다중 가구 동시 생성 및 시연 인터페이스</p>
     </div>
-    <button class="btn btn-secondary header-export" onclick="downloadCsv()">CSV 내보내기</button>
+    <div class="controls header-export">
+      <a class="btn btn-secondary" href="/routine-demo">정상·이상 비교 시연</a>
+      <button class="btn btn-secondary" onclick="downloadCsv()">CSV 내보내기</button>
+    </div>
   </header>
 
   <!-- MQTT 발행 확인까지의 흐름만 시각화한다. -->

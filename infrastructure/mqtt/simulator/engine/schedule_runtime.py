@@ -306,7 +306,7 @@ class DeterministicScheduleRunner:
                 app_state.inrush_remaining = 0
             elif t.transition_type == TransitionType.ON:
                 app_state.state = "STARTING"
-                app_state.nominal_w = self._rng.uniform(*profile["nominal_w"])
+                app_state.nominal_w = profile["median_w"]  # EDA 실측 중앙값 고정
                 app_state.nominal_pf = self._rng.uniform(*profile["pf_nominal"])
                 app_state.inrush_remaining = profile["inrush_sec"]
 

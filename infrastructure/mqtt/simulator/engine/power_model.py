@@ -54,7 +54,7 @@ def update_and_generate_device_load(house: str, device: str, allow_random: bool 
         if allow_random and rng.random() < profile["turn_on_prob"]:
             dur_min, dur_max = profile["session_sec"]
             state["session_remaining"] = rng.randint(dur_min, dur_max)
-            state["nominal_w"] = rng.uniform(*profile["nominal_w"])
+            state["nominal_w"] = profile["median_w"]  # EDA 실측 중앙값 고정
             state["nominal_pf"] = rng.uniform(*profile["pf_nominal"])
             state["state"] = "STARTING"
             state["manual_hold"] = False
