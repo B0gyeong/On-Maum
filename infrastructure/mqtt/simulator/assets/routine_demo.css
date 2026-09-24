@@ -48,9 +48,6 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 /* 스테이지 */
 .stage-heading { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 12px; }
 .stage-heading h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
-.clock-block { display: flex; align-items: baseline; gap: 10px; padding: 8px 14px; background: var(--card-bg); border: 1px solid var(--border); }
-.clock-block span { color: var(--text-muted); font-size: 0.75rem; }
-.clock-block strong { font-variant-numeric: tabular-nums; font-size: 1.5rem; font-weight: 700; }
 
 .chart-stack { display: grid; gap: 16px; }
 .wave-card { background: var(--card-bg); border: 1px solid var(--border); border-top: 3px solid var(--normal); }
@@ -61,6 +58,10 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .title-row { display: flex; align-items: center; gap: 10px; }
 .title-row h3 { margin: 0; font-size: 1.05rem; font-weight: 600; }
 .wave-card-head p { margin: 3px 0 0; color: var(--text-muted); font-size: 0.82rem; }
+.source-tag { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; color: var(--text-muted); background: var(--card-bg-sub); border: 1px solid var(--border); font-size: 0.7rem; font-weight: 600; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
+.wave-card-anomaly[data-state="running"] .live-dot { background: var(--anomaly); animation: live-pulse 1.2s ease-in-out infinite; }
+@keyframes live-pulse { 50% { opacity: .25; } }
 
 /* 상태 배지: 시뮬레이터 .badge-status 계열 */
 .status-badge { display: inline-block; padding: 3px 9px; border: 1px solid transparent; font-size: 0.72rem; font-weight: 600; }
@@ -71,6 +72,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 
 .live-metric { text-align: right; white-space: nowrap; }
 .live-metric span { display: block; color: var(--text-muted); font-size: 0.72rem; letter-spacing: 0.05em; }
+.live-metric span b { margin-left: 4px; color: var(--text-main); font-variant-numeric: tabular-nums; font-size: 0.85rem; font-weight: 700; letter-spacing: 0; }
 .live-metric strong { margin-right: 4px; font-variant-numeric: tabular-nums; font-size: 1.8rem; font-weight: 700; }
 .live-metric em { color: var(--text-muted); font-size: 0.95rem; font-style: normal; font-weight: 500; }
 .chart-wrap { height: 150px; padding: 0 14px; }
@@ -82,18 +84,23 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .legend-normal { border-color: var(--normal); }
 .legend-anomaly { border-color: var(--anomaly); }
 .legend-dash { border-color: var(--text-faint); border-top-style: dashed; }
+.legend-marker { display: inline-block; width: 0; height: 12px; margin: 0 8px 0 4px; vertical-align: middle; border-left: 1px dashed var(--text-faint); }
 .legend-area { display: inline-block; width: 14px; height: 9px; margin-right: 6px; vertical-align: middle; background: rgba(243, 121, 41, 0.12); border: 1px solid rgba(243, 121, 41, 0.35); }
 
-/* 재생 컨트롤: 시뮬레이터 .presentation-panel / .btn 톤 */
-.timeline-panel { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 24px; align-items: center; margin-top: 16px; padding: 16px 20px; background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(250, 250, 249, 0.98)); border: 1px solid var(--border); }
+/* 카드 하단 컨트롤: 시뮬레이터 .presentation-panel / .btn 톤 */
+.card-controls { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 24px; align-items: center; padding: 12px 20px; background: var(--card-bg-sub); border-top: 1px solid var(--border); }
 .controls { display: flex; align-items: center; gap: 8px; }
 .controls button { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px; color: var(--text-main); background: #ffffff; border: 1px solid var(--border-strong); font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: all .2s cubic-bezier(0.4, 0, 0.2, 1); }
-.controls button:hover { background: var(--border-strong); }
+.controls button:hover:not(:disabled) { background: var(--border-strong); }
+.controls button:disabled, .speed-control select:disabled { opacity: .5; cursor: not-allowed; }
 .controls .play-button { min-width: 116px; color: #ffffff; background: var(--accent-secondary); border-color: rgba(243, 121, 41, 0.4); }
-.controls .play-button:hover { background: var(--accent); transform: translateY(-1px); }
+.controls .play-button:hover:not(:disabled) { background: var(--accent); transform: translateY(-1px); }
 .speed-control { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 4px 0 12px; color: var(--text-muted); background: #ffffff; border: 1px solid var(--border); font-size: 0.8rem; font-weight: 600; }
 .speed-control select { height: 100%; padding: 0 6px; color: var(--text-main); background: transparent; border: 0; font-weight: 600; cursor: pointer; }
 .scrubber-wrap input { width: 100%; accent-color: var(--accent-secondary); cursor: pointer; }
+.live-message { margin: 0; color: var(--text-muted); font-size: 0.82rem; }
+.wave-card-anomaly[data-state="error"] .live-message { color: var(--anomaly); font-weight: 600; }
+.wave-card-anomaly[data-state="completed"] .live-message { color: var(--text-main); font-weight: 600; }
 .time-labels { display: flex; justify-content: space-between; margin-top: 4px; color: var(--text-muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
 
 /* 스토리 설명 */
@@ -119,13 +126,14 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .wave-card-head { grid-template-columns: 32px minmax(0, 1fr); }
   .live-metric { grid-column: 2; text-align: left; }
   .chart-wrap { height: 170px; }
-  .timeline-panel { grid-template-columns: 1fr; }
+  .card-controls { grid-template-columns: 1fr; gap: 12px; }
 }
 @media (max-width: 620px) {
   .demo-shell { padding: 16px; }
   .header-copy h1 { font-size: 1.35rem; }
   .lead { font-size: 0.82rem; }
-  .clock-block span, .wave-card-head p { display: none; }
+  .wave-card-head p { display: none; }
+  .card-controls { padding: 12px; }
   .wave-card-head { padding: 14px 12px 5px; gap: 8px; }
   .title-row { align-items: flex-start; flex-direction: column; gap: 4px; }
   .chart-caption { padding-left: 14px; gap: 10px; flex-wrap: wrap; }
@@ -139,5 +147,5 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .status-orbit i { animation: none; }
+  .status-orbit i, .live-dot { animation: none !important; }
 }

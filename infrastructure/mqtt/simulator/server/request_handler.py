@@ -389,11 +389,18 @@ class RequestHandler(BaseHTTPRequestHandler):
                 if any(item["scenario"] == "normal_routine" and item["house"] != "H001" for item in normalized_households):
                     self.send_error_json(400, "BAD_REQUEST", "normal_routine 시나리오는 H001 가구에서만 실행할 수 있습니다.")
                     return
+                if any(item["scenario"] == "prolonged_use" and item["house"] != "H001" for item in normalized_households):
+                    self.send_error_json(400, "BAD_REQUEST", "prolonged_use 시나리오는 H001 가구에서만 실행할 수 있습니다.")
+                    return
 
                 has_normal = any(item["scenario"] == "normal_routine" for item in normalized_households)
                 has_missed = any(item["scenario"] == "routine_missed" for item in normalized_households)
                 if has_normal and has_missed:
                     self.send_error_json(400, "BAD_REQUEST", "normal_routine과 routine_missed는 동일한 다중 실행에서 함께 사용할 수 없습니다.")
+                    return
+                has_prolonged = any(item["scenario"] == "prolonged_use" for item in normalized_households)
+                if has_prolonged and (has_normal or has_missed):
+                    self.send_error_json(400, "BAD_REQUEST", "prolonged_use는 normal_routine·routine_missed와 동일한 다중 실행에서 함께 사용할 수 없습니다.")
                     return
             else:
                 house = params.get("house", "H001")
@@ -407,6 +414,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                     return
                 if scenario == "normal_routine" and house != "H001":
                     self.send_error_json(400, "BAD_REQUEST", "normal_routine 시나리오는 H001 가구에서만 실행할 수 있습니다.")
+                    return
+                if scenario == "prolonged_use" and house != "H001":
+                    self.send_error_json(400, "BAD_REQUEST", "prolonged_use 시나리오는 H001 가구에서만 실행할 수 있습니다.")
                     return
 
                 normalized_households = [{"house": house, "scenario": scenario}]
