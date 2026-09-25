@@ -9,6 +9,9 @@ attempts=${GOLD_DAILY_ATTEMPTS:-3}
 retry_seconds=${GOLD_DAILY_RETRY_SECONDS:-30}
 catchup_days=${GOLD_DAILY_CATCHUP_DAYS:-3}
 business_timezone=${GOLD_DAILY_TIMEZONE:-Asia/Seoul}
+report_enabled=${HOUSEHOLD_REPORT_ENABLED:-false}
+report_window=${HOUSEHOLD_REPORT_WINDOW_DAYS:-90}
+case "$report_enabled" in true|false) ;; *) echo "HOUSEHOLD_REPORT_ENABLED must be true or false" >&2; exit 2;; esac
 docker_bin=${GOLD_DAILY_DOCKER_BIN:-docker}
 date_bin=${GOLD_DAILY_DATE_BIN:-date}
 flock_bin=${GOLD_DAILY_FLOCK_BIN:-flock}
@@ -58,6 +61,13 @@ for ((days_ago=catchup_days; days_ago>=1; days_ago--)); do
     12) overall=12 ;;   # durable outbox is handed to gold-profile-publisher
     *) exit "$status" ;;
   esac
+  if [[ "$report_enabled" == true && ( "$status" == 0 || "$status" == 12 ) ]]; then
+    "$docker_bin" compose --env-file "$env_file" -f "$compose_file" \
+      run --rm --no-deps gold-profile household-report daily \
+      --as-of "$as_of" --window-days "$report_window"
+    report_status=$?
+    (( report_status == 0 )) || exit "$report_status"
+  fi
 done
 if (( incomplete )); then
   exit 10

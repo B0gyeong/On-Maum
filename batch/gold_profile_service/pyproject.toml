@@ -22,6 +22,7 @@ dev = ["pytest>=8,<9", "pytest-cov>=6,<7"]
 [project.scripts]
 gold-profile = "gold_profile.cli:main"
 household-report = "household_report.cli:main"
+gold-experiment = "gold_profile.experiment:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

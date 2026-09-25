@@ -15,6 +15,7 @@ try:
         update_standby_environment,
         inject_peak_scenario_event as _inject_peak_scenario_event,
         inject_normal_routine_scenario_event as _inject_normal_routine_scenario_event,
+        inject_prolonged_use_scenario_event as _inject_prolonged_use_scenario_event,
     )
 except ModuleNotFoundError:
     # engine 패키지가 상대 패키지 내부에서 독립 임포트될 경우를 위한 fallback
@@ -22,6 +23,7 @@ except ModuleNotFoundError:
         update_standby_environment,
         inject_peak_scenario_event as _inject_peak_scenario_event,
         inject_normal_routine_scenario_event as _inject_normal_routine_scenario_event,
+        inject_prolonged_use_scenario_event as _inject_prolonged_use_scenario_event,
     )
 
 
@@ -33,6 +35,11 @@ def inject_peak_scenario_event(cycle_sec: int, house: str) -> str | None:
 def inject_normal_routine_scenario_event(cycle_sec: int, house: str) -> str | None:
     """정상 루틴 시나리오 타임라인 이벤트 주입 (scenarios 모듈 위임)"""
     return _inject_normal_routine_scenario_event(cycle_sec, house, device_states)
+
+
+def inject_prolonged_use_scenario_event(cycle_sec: int, house: str) -> str | None:
+    """사용시간 초과 시나리오 타임라인 이벤트 주입 (scenarios 모듈 위임)"""
+    return _inject_prolonged_use_scenario_event(cycle_sec, house, device_states)
 
 
 def update_house_environment(house: str) -> tuple[float, float, float]:

@@ -517,6 +517,10 @@ services:
   #   docker compose run --rm gold-profile gold-profile daily
   gold-profile:
     image: ${GOLD_PROFILE_IMAGE:?GOLD_PROFILE_IMAGE required}
+    volumes:
+      - type: bind
+        source: ${EXPERIMENTS_HOST_DIR:-/opt/nilm/experiments}
+        target: /app/experiments
     profiles:
       - batch
     restart: "no"
@@ -525,6 +529,7 @@ services:
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432
       DATABASE_NAME: analysis_db
+      REPORT_DATABASE_URL: ${REPORT_DATABASE_URL:-}
       DATABASE_USER: ${POSTGRES_USER:?POSTGRES_USER required}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
       HDFS_URL: http://namenode:9870

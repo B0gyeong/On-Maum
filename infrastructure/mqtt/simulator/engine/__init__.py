@@ -24,6 +24,7 @@ from .state import (
 from .power_model import (
     inject_peak_scenario_event,
     inject_normal_routine_scenario_event,
+    inject_prolonged_use_scenario_event,
     update_house_environment,
     update_and_generate_device_load,
     calculate_main_panel_metrics,
@@ -108,6 +109,7 @@ __all__ = [
     "resolve_seed",
     "inject_peak_scenario_event",
     "inject_normal_routine_scenario_event",
+    "inject_prolonged_use_scenario_event",
     "update_house_environment",
     "update_and_generate_device_load",
     "calculate_main_panel_metrics",
