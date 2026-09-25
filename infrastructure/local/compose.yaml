@@ -617,6 +617,10 @@ services:
         silver: ../../batch/power_silver_service
       target: runtime
     image: nilm-gold-profile:local
+    volumes:
+      - type: bind
+        source: ${EXPERIMENTS_HOST_DIR:-../../experiments}
+        target: /app/experiments
     profiles:
       - batch
     restart: "no"

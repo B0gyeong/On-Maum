@@ -7,6 +7,8 @@ from uuid import uuid4
 from power_silver.writer import write_parquet
 
 from household_report.assessment_summary import build_assessment_report
+from household_report.daily_trends import assessment_mode, build_daily_trends
+from pyspark.sql import functions as F
 from household_report.evidence import build_evidence
 from household_report.input_snapshot import read_source
 from household_report.usage_summary import build_usage_report
@@ -23,11 +25,14 @@ def build_report(
 ):
     if partitions < 1:
         raise ValueError("partitions must be positive")
+    spark.conf.set("spark.sql.session.timeZone", "UTC")
     sources = {
         name: read_source(spark, storage, inputs, name)
         for name in inputs.document["sources"]
     }
     validate_inputs(sources, inputs)
+    mode = assessment_mode(sources["assessments"], inputs.document)
+    sources["assessments"] = sources["assessments"].withColumn("assessment_mode", F.lit(mode))
     targets = sources["targets"].select("household_id")
     frames = build_usage_report(
         sources["usage"], targets, start=inputs.start, end=inputs.end
@@ -44,6 +49,8 @@ def build_report(
     frames["evidence"] = build_evidence(
         frames["usage_summary"], frames["assessment_detail"]
     )
+    frames.update(build_daily_trends(frames["usage_daily"], frames["assessment_detail"], targets,
+                                    start=inputs.start, end=inputs.end, mode=mode))
     validate_outputs(frames)
 
     attempt_id = str(uuid4())
@@ -71,6 +78,7 @@ def build_report(
 
     manifest = {
         "schema_version": 1,
+        "assessment_mode": mode,
         "report_id": inputs.report_id,
         "attempt_id": attempt_id,
         "period_start": inputs.start.isoformat(),

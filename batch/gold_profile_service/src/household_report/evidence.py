@@ -2,6 +2,8 @@ from pyspark.sql import functions as F
 
 
 def build_evidence(usage_summary, assessment_detail):
+    if "assessment_mode" not in assessment_detail.columns:
+        assessment_detail = assessment_detail.withColumn("assessment_mode", F.lit("UNKNOWN_ORIGIN"))
     usage = (
         usage_summary.withColumn("evidence_type", F.lit("USAGE_FREQUENCY"))
         .withColumn(
@@ -54,12 +56,16 @@ def build_evidence(usage_summary, assessment_detail):
             F.concat(F.lit("assessment:"), F.col("assessment_id").cast("string")),
         )
         .withColumn("appliance_type", F.lit(None).cast("string"))
-        .withColumn("statement", F.lit("당시 모니터링에 저장된 평가와 비교 근거입니다."))
+        .withColumn("statement", F.when(F.col("assessment_mode") == "EVENT_TIME_REASSESSMENT",
+                                       "과거 관측 시점 기준으로 다시 계산한 평가입니다.")
+                    .when(F.col("assessment_mode") == "LIVE_RECORDED", "모니터링 DB에 저장된 평가입니다.")
+                    .otherwise("평가 출처가 확인되지 않은 기록입니다."))
         .withColumn(
             "values_json",
             F.to_json(
                 F.struct(
                     "assessment_id",
+                    "assessment_mode",
                     "assessed_at",
                     "assessment_status",
                     "risk_score",

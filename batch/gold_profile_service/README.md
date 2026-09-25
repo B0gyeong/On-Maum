@@ -1,5 +1,10 @@
 # Gold profile batch
 
+실험 ID별 설정·CSV·결과·로그 저장 및 로컬/EC2 bind mount 실행은
+[EXPERIMENTS.md](EXPERIMENTS.md)를 참고하세요.
+
+Grafana 일별 보고서·추세 자동화의 설치와 실행 방법은 [REPORTING.md](REPORTING.md)를 참고하세요.
+
 `gold-profile` reads the explicitly selected ACTIVE versions of the previous 28
 `appliance_usage_daily` and `appliance_session_daily_slices` partitions. It publishes
 two versioned Gold datasets and their versioned Silver episode input:

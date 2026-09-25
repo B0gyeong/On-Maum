@@ -8,6 +8,10 @@ plugins {
 group = 'com.nilm'
 version = '0.0.1-SNAPSHOT'
 
+springBoot {
+    mainClass = 'com.nilm.monitoring.MonitoringServiceApplication'
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
@@ -71,4 +75,10 @@ tasks.register('copySonarLibraries', Sync) {
 tasks.register('copySonarTestLibraries', Sync) {
     from configurations.testRuntimeClasspath
     into layout.buildDirectory.dir('sonar-libraries/test')
+}
+
+// Offline batch: no Spring context, database connections, Kafka consumers or push delivery.
+tasks.register('historicalAssessment', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.nilm.monitoring.backfill.HistoricalAssessmentCli'
 }

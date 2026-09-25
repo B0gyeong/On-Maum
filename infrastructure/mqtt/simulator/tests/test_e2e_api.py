@@ -139,7 +139,7 @@ class TestE2EApi(unittest.TestCase):
                     self.assertEqual(response.status, 200)
                     self.assertIn("text/html", response.headers["Content-Type"])
                     html = response.read().decode("utf-8")
-                    self.assertIn("평소와 다른 아침", html)
+                    self.assertIn("평소보다 오래 켜진 전자레인지", html)
                     self.assertIn('id="normalChart"', html)
                     self.assertIn('id="anomalyChart"', html)
 

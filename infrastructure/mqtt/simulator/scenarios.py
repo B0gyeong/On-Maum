@@ -177,6 +177,90 @@ def inject_normal_routine_scenario_event(cycle_sec: int, house: str, device_stat
 
 
 # ==========================================
+# 2-A-2. 사용시간 초과(PROLONGED_USE) 시나리오
+# ==========================================
+class ProlongedUseScenario:
+    """
+    H001 전자레인지 사용시간 초과(PROLONGED_USE) 시나리오
+    - 평소 점심에는 전자레인지를 약 90초 쓰고 끄지만, 오늘은 켠 채로 5분간 이어진다.
+    - 기본 시작 시각: 11:55:00 KST (cycle N의 가상 시각 = 시작 시각 + (N-1)초)
+    - cycle 1~300 (11:55:00~11:59:59): 대기전력만 발행. 분석 모델 입력 창(255초)을 먼저 채운다.
+    - 전자레인지 ON: 12:00:00 KST (cycle 301), manual_hold로 명시적 OFF 전까지 유지 (약 941W 연속 블록)
+    - 12:02:00 KST (cycle 421): 켠 뒤 120초 경과 (시연 화면의 허용 사용시간 표시 기준)
+    - 전자레인지 OFF: 12:05:00 KST (cycle 601). ON 활성 샘플은 cycle 301~600, 정확히 300개
+    - 12:05:00 이후 30초 동안 대기전력 발행 후 자동 완료 (cycle 630, 12:05:29)
+    시뮬레이터는 MQTT 원천 데이터만 만든다. 이상 판정은 분석 서비스가 수행한다.
+    """
+    TARGET_HOUSE = "H001"
+    APPLIANCE = "microwave"
+    DEFAULT_START_TIME = "11:55:00"
+    APPLIANCE_ON_TIME = "12:00:00"
+    ALLOWED_DURATION_ELAPSED_TIME = "12:02:00"
+    APPLIANCE_OFF_TIME = "12:05:00"
+    APPLIANCE_ON_CYCLE = 301
+    ALLOWED_DURATION_SEC = 120
+    ALLOWED_DURATION_ELAPSED_CYCLE = APPLIANCE_ON_CYCLE + ALLOWED_DURATION_SEC
+    APPLIANCE_OFF_CYCLE = 601
+    APPLIANCE_DURATION_SEC = APPLIANCE_OFF_CYCLE - APPLIANCE_ON_CYCLE
+    TOTAL_CYCLES = 630
+    DEFAULT_COUNT = 630
+
+
+PROLONGED_USE_SCHEDULE = {
+    ProlongedUseScenario.APPLIANCE_ON_CYCLE: {
+        "event": "MICROWAVE_START",
+        "desc": "12:00 점심 데우기 시작 — 전자레인지 가동 (평소 약 90초 사용)",
+        "actions": {
+            "microwave": {
+                "state": "STARTING",
+                "session_remaining": ProlongedUseScenario.APPLIANCE_DURATION_SEC,
+                "inrush_remaining": 2,
+                "nominal_w": 940.0,
+                "nominal_pf": 0.91,
+                "manual_hold": True,
+            }
+        }
+    },
+    ProlongedUseScenario.ALLOWED_DURATION_ELAPSED_CYCLE: {
+        "event": "ALLOWED_DURATION_ELAPSED",
+        "desc": "12:02 전자레인지 연속 사용 120초 경과 — 평소 사용시간 초과, 계속 가동 중",
+        "actions": {}
+    },
+    ProlongedUseScenario.APPLIANCE_OFF_CYCLE: {
+        "event": "MICROWAVE_STOP",
+        "desc": "12:05 전자레인지 5분 연속 사용 후 종료 — 대기전력 복귀",
+        "actions": {
+            "microwave": {
+                "state": "OFF",
+                "session_remaining": 0,
+                "inrush_remaining": 0,
+                "nominal_w": 0.0,
+                "nominal_pf": 0.0,
+                "manual_hold": False,
+            }
+        }
+    },
+    ProlongedUseScenario.TOTAL_CYCLES: {
+        "event": "PROLONGED_USE_COMPLETE",
+        "desc": "H001 전자레인지 사용시간 초과 전력 패턴 발행 완료",
+        "actions": {}
+    }
+}
+
+
+def inject_prolonged_use_scenario_event(cycle_sec: int, house: str, device_states: dict) -> str | None:
+    """사용시간 초과 시나리오 타임라인 이벤트 주입"""
+    if cycle_sec in PROLONGED_USE_SCHEDULE:
+        item = PROLONGED_USE_SCHEDULE[cycle_sec]
+        if house in device_states:
+            for dev_name, dev_conf in item["actions"].items():
+                if dev_name in device_states[house]:
+                    device_states[house][dev_name].update(dev_conf)
+        return item["desc"]
+    return None
+
+
+# ==========================================
 # 2-B. 센서 고장/결측(SENSOR_FAULT) 시나리오
 # ==========================================
 @dataclass(frozen=True)
@@ -400,9 +484,11 @@ def resolve_simulation_start_time(
     D. simulation_date와 완전한 ISO datetime 동시 지정: 충돌 오류(ValueError) 발생
     E. simulation_date만 지정:
        - routine_missed: 선택 날짜 + routine_default_time (KST)
+       - normal_routine / prolonged_use: 선택 날짜 + 시나리오 DEFAULT_START_TIME (KST)
        - peak/random/manual: 선택 날짜 + 현재 KST 시각(now)
     F. 아무 값도 지정하지 않음:
        - routine_missed: 오늘 날짜 + routine_default_time (KST)
+       - normal_routine / prolonged_use: 오늘 날짜 + 시나리오 DEFAULT_START_TIME (KST)
        - peak/random/manual: None 반환 (실제 현재 시각 기반 동작)
     """
     # 1. 기준 now_dt 준비 (KST aware)
@@ -467,6 +553,9 @@ def resolve_simulation_start_time(
         elif scenario == "normal_routine":
             def_h, def_m, def_s = _parse_time_parts(NormalRoutineScenario.DEFAULT_START_TIME)
             return datetime(target_date.year, target_date.month, target_date.day, def_h, def_m, def_s, tzinfo=KST)
+        elif scenario == "prolonged_use":
+            def_h, def_m, def_s = _parse_time_parts(ProlongedUseScenario.DEFAULT_START_TIME)
+            return datetime(target_date.year, target_date.month, target_date.day, def_h, def_m, def_s, tzinfo=KST)
         else:
             return datetime(
                 target_date.year, target_date.month, target_date.day,
@@ -482,6 +571,10 @@ def resolve_simulation_start_time(
     elif scenario == "normal_routine":
         today = now_dt.date()
         def_h, def_m, def_s = _parse_time_parts(NormalRoutineScenario.DEFAULT_START_TIME)
+        return datetime(today.year, today.month, today.day, def_h, def_m, def_s, tzinfo=KST)
+    elif scenario == "prolonged_use":
+        today = now_dt.date()
+        def_h, def_m, def_s = _parse_time_parts(ProlongedUseScenario.DEFAULT_START_TIME)
         return datetime(today.year, today.month, today.day, def_h, def_m, def_s, tzinfo=KST)
 
     return None
@@ -574,6 +667,15 @@ def resolve_multi_simulation_start_time(
     if has_normal_routine and has_routine_missed:
         raise ValueError("normal_routine과 routine_missed는 동일한 다중 실행에서 함께 사용할 수 없습니다.")
 
+    has_prolonged_use = any(isinstance(h, dict) and h.get("scenario") == "prolonged_use" for h in households)
+    if has_prolonged_use and (has_normal_routine or has_routine_missed):
+        raise ValueError("prolonged_use는 normal_routine·routine_missed와 동일한 다중 실행에서 함께 사용할 수 없습니다.")
+
+    if has_prolonged_use:
+        base_d = target_date if target_date is not None else now_dt.date()
+        def_h, def_m, def_s = _parse_time_parts(ProlongedUseScenario.DEFAULT_START_TIME)
+        return datetime(base_d.year, base_d.month, base_d.day, def_h, def_m, def_s, tzinfo=KST)
+
     if has_normal_routine:
         base_d = target_date if target_date is not None else now_dt.date()
         def_h, def_m, def_s = _parse_time_parts(NormalRoutineScenario.DEFAULT_START_TIME)
@@ -602,6 +704,8 @@ def get_scenario_target_cycles(scenario: str, fault_duration_sec: int = 120) -> 
         return 300
     elif scenario == "normal_routine":
         return NormalRoutineScenario.TOTAL_CYCLES
+    elif scenario == "prolonged_use":
+        return ProlongedUseScenario.TOTAL_CYCLES
     elif scenario == "sensor_fault":
         return fault_duration_sec + 20
     return 0

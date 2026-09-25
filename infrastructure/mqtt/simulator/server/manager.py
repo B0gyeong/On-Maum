@@ -146,10 +146,12 @@ class SimulatorManager:
                 normalized_households = sorted(households, key=lambda x: x["house"])
                 is_multi = (len(normalized_households) > 1)
 
-            # 1-A. normal_routine은 H001 가구에서만 실행 가능
+            # 1-A. normal_routine·prolonged_use는 H001 가구에서만 실행 가능
             for h_item in normalized_households:
                 if h_item.get("scenario") == "normal_routine" and h_item.get("house") != "H001":
                     raise ValueError("normal_routine 시나리오는 H001 가구에서만 실행할 수 있습니다.")
+                if h_item.get("scenario") == "prolonged_use" and h_item.get("house") != "H001":
+                    raise ValueError("prolonged_use 시나리오는 H001 가구에서만 실행할 수 있습니다.")
 
             # 2. TLS 설정 사전 동기 검증 (CA 누락/미존재/권한 오류 시 런타임 start 호출에서 즉각 예외 발생)
             from engine.tls import get_mqtt_tls_context
@@ -161,6 +163,9 @@ class SimulatorManager:
             has_missed = any(h["scenario"] == "routine_missed" for h in normalized_households)
             if has_normal and has_missed:
                 raise ValueError("normal_routine과 routine_missed는 동일한 다중 실행에서 함께 사용할 수 없습니다.")
+            has_prolonged = any(h["scenario"] == "prolonged_use" for h in normalized_households)
+            if has_prolonged and (has_normal or has_missed):
+                raise ValueError("prolonged_use는 normal_routine·routine_missed와 동일한 다중 실행에서 함께 사용할 수 없습니다.")
 
             if not is_multi and normalized_households[0]["scenario"] == "routine_missed":
                 base_dt = scenarios.resolve_simulation_start_time(
@@ -174,6 +179,11 @@ class SimulatorManager:
                     simulation_date=simulation_date,
                     routine_default_time=scenarios.NormalRoutineScenario.DEFAULT_START_TIME
                 )
+            elif not is_multi and normalized_households[0]["scenario"] == "prolonged_use":
+                base_dt = scenarios.resolve_simulation_start_time(
+                    "prolonged_use",
+                    simulation_date=simulation_date,
+                )
             else:
                 base_dt = scenarios.resolve_multi_simulation_start_time(
                     normalized_households,
@@ -184,8 +194,8 @@ class SimulatorManager:
             # 3-0. 시작 시각 고정: 지정 시 선택 날짜(없으면 오늘) + start_time(KST)으로 base_dt를 덮어쓴다.
             #      루틴 시나리오는 타임라인이 시작 시각에 묶여 있으므로 허용하지 않는다.
             if start_time is not None:
-                if has_normal or has_missed:
-                    raise ValueError("normal_routine/routine_missed 시나리오는 시작 시각이 고정되어 있어 start_time을 지정할 수 없습니다.")
+                if has_normal or has_missed or has_prolonged:
+                    raise ValueError("normal_routine/routine_missed/prolonged_use 시나리오는 시작 시각이 고정되어 있어 start_time을 지정할 수 없습니다.")
                 base_dt = scenarios.resolve_fixed_start_time(start_time, simulation_date=simulation_date)
 
             resolved_start_iso = scenarios.format_iso_utc(base_dt) if base_dt else None
@@ -592,6 +602,10 @@ class SimulatorManager:
                                         event_desc = "08:04:58 아침 정상 루틴 시뮬레이션 시작 (대기전력 유지)"
                                     elif h_cycle == scenarios.NormalRoutineScenario.TOTAL_CYCLES:
                                         event_desc = "H001 정상 일상 전력 패턴 발행 완료"
+                            elif scenario == "prolonged_use":
+                                event_desc = simulator.inject_prolonged_use_scenario_event(h_cycle, house)
+                                if not event_desc and h_cycle == 1:
+                                    event_desc = "11:55 점심 사용시간 초과 시나리오 시작 (대기전력 유지)"
                             elif scenario == "sensor_fault":
                                 fault_dur = item.get("fault_duration_sec") or scenarios.SensorFaultScenario.DEFAULT_FAULT_DURATION_SEC
                                 tl = scenarios.SensorFaultScenario.get_timeline(fault_dur)
@@ -667,6 +681,8 @@ class SimulatorManager:
                             elif scenario == "routine_missed" and h_cycle >= 300:
                                 is_completed = True
                             elif scenario == "normal_routine" and h_cycle >= scenarios.NormalRoutineScenario.TOTAL_CYCLES:
+                                is_completed = True
+                            elif scenario == "prolonged_use" and h_cycle >= scenarios.ProlongedUseScenario.TOTAL_CYCLES:
                                 is_completed = True
                             elif scenario == "sensor_fault":
                                 fault_dur = res.get("fault_dur") or self.active_households[house].get("fault_duration_sec") or scenarios.SensorFaultScenario.DEFAULT_FAULT_DURATION_SEC
@@ -771,6 +787,10 @@ class SimulatorManager:
                             print(f"[WebSimulator] (T+{h_cycle:03d}s | {sim_datetime_kst}) {house} 전력: {metrics['active_power']:5.1f} W | {status_tag} [{h_status}]{notice_str}", flush=True)
                         elif scenario == "normal_routine":
                             status_tag = "전자레인지 가동 중" if "전자레인지" in metrics["active_devices"] else "정상 대기"
+                            notice_str = f" <== [{event_desc}]" if event_desc else ""
+                            print(f"[WebSimulator] (T+{h_cycle:03d}s | {sim_datetime_kst}) {house} 전력: {metrics['active_power']:7.1f} W | {status_tag} [{h_status}]{notice_str}", flush=True)
+                        elif scenario == "prolonged_use":
+                            status_tag = "전자레인지 가동 중" if res["devices_snapshot"].get("microwave", {}).get("enabled") else "대기"
                             notice_str = f" <== [{event_desc}]" if event_desc else ""
                             print(f"[WebSimulator] (T+{h_cycle:03d}s | {sim_datetime_kst}) {house} 전력: {metrics['active_power']:7.1f} W | {status_tag} [{h_status}]{notice_str}", flush=True)
                         elif scenario == "sensor_fault":

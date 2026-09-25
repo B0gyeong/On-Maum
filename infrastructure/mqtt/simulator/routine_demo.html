@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>일상 루틴 정상·이상 파형 비교 시연</title>
+  <title>가전 사용시간 초과 비교 시연</title>
   <link rel="stylesheet" href="assets/routine_demo.css">
 </head>
 <body>
@@ -11,26 +11,22 @@
     <header class="demo-header">
       <a class="back-link" href="/" aria-label="실시간 시뮬레이터로 돌아가기">← 실시간 시뮬레이터</a>
       <div class="header-copy">
-        <p class="eyebrow">NILM ROUTINE COMPARISON</p>
-        <h1>평소와 다른 아침을 전력 파형으로 발견합니다</h1>
-        <p class="lead">평소에는 08:09에 사용하던 전자레인지가 오늘은 켜지지 않았습니다. 같은 시간축에서 정상 루틴과 루틴 누락을 비교해 보세요.</p>
+        <p class="eyebrow">NILM PROLONGED USE COMPARISON</p>
+        <h1>평소보다 오래 켜진 전자레인지를 전력 파형으로 발견합니다</h1>
+        <p class="lead">평소에는 점심 12:00에 전자레인지를 켜고 1분 30초쯤 뒤에 끕니다. 오늘은 켠 채로 5분이 지났습니다. 위는 평소 생활 패턴의 기록 재생이고, 아래는 금일 패턴으로 H001의 측정값을 실제로 MQTT에 발행하면서 실시간으로 그립니다.</p>
       </div>
       <div class="scenario-summary" aria-label="시연 시나리오 요약">
         <span>H001</span>
         <strong>전자레인지</strong>
-        <small>평소 사용 시간 08:09–08:10</small>
+        <small>평소 12:00 · 약 1분 30초 사용<br>허용 사용시간 2분</small>
       </div>
     </header>
 
     <section class="stage" aria-labelledby="stage-title">
       <div class="stage-heading">
         <div>
-          <p class="section-kicker">WAVEFORM PLAYBACK</p>
-          <h2 id="stage-title">동일 시간대 전력 비교</h2>
-        </div>
-        <div class="clock-block">
-          <span>가상 시각</span>
-          <strong id="demoClock">08:08:30</strong>
+          <p class="section-kicker">WAVEFORM COMPARISON</p>
+          <h2 id="stage-title">평소 사용시간과 오늘 실시간 발행 비교</h2>
         </div>
       </div>
 
@@ -40,68 +36,86 @@
             <div class="scenario-number">01</div>
             <div>
               <div class="title-row">
-                <h3>평소의 아침</h3>
+                <h3>평소 생활 패턴</h3>
                 <span id="normalBadge" class="status-badge status-normal">대기전력</span>
+                <span class="source-tag">기록 재생</span>
               </div>
-              <p>늘 사용하던 시각에 전자레인지가 켜지고, 약 60초 뒤 대기전력으로 돌아옵니다.</p>
+              <p>12:00에 전자레인지를 켜고 약 90초 데운 뒤 끕니다. 허용 사용시간 2분 안에서 끝납니다.</p>
             </div>
             <div class="live-metric">
-              <span>현재 유효전력</span>
+              <span>가상 시각 <b id="demoClock">11:59:30</b></span>
               <strong id="normalPower">—</strong><em>W</em>
             </div>
           </div>
           <div class="chart-wrap">
-            <canvas id="normalChart" role="img" aria-label="평소 전자레인지 사용이 포함된 정상 전력 파형"></canvas>
+            <canvas id="normalChart" role="img" aria-label="평소 전자레인지를 약 90초 사용하고 끄는 정상 전력 파형"></canvas>
           </div>
           <div class="chart-caption">
             <span><i class="legend-line legend-normal"></i>실측 전력</span>
-            <span><i class="legend-area"></i>평소 사용 구간</span>
-            <strong>정상 루틴</strong>
+            <span><i class="legend-area"></i>평소 사용 구간 (약 90초)</span>
+            <span><i class="legend-marker"></i>허용 사용시간 2분 경과 지점</span>
+            <strong>정상 사용</strong>
+          </div>
+          <div class="card-controls">
+            <div class="controls">
+              <button id="playButton" class="play-button" type="button">▶ 재생</button>
+              <button id="resetButton" class="reset-button" type="button">↺ 처음부터</button>
+              <label class="speed-control">재생 속도
+                <select id="speedSelect" aria-label="기록 재생 속도">
+                  <option value="1">1×</option>
+                  <option value="5">5×</option>
+                  <option value="10" selected>10×</option>
+                </select>
+              </label>
+            </div>
+            <div class="scrubber-wrap">
+              <input id="demoScrubber" type="range" min="0" max="180" value="0" aria-label="기록 재생 위치">
+              <div class="time-labels"><span>11:59:30</span><span>12:00:00 켬</span><span>12:01:30 끔</span><span>12:02:30</span></div>
+            </div>
           </div>
         </article>
 
-        <article class="wave-card wave-card-anomaly">
+        <article class="wave-card wave-card-anomaly" id="liveCard" data-state="idle">
           <div class="wave-card-head">
             <div class="scenario-number">02</div>
             <div>
               <div class="title-row">
-                <h3>오늘의 아침</h3>
-                <span id="anomalyBadge" class="status-badge status-waiting">대기전력</span>
+                <h3>금일 패턴</h3>
+                <span id="liveBadge" class="status-badge status-waiting">실행 전</span>
+                <span class="source-tag source-tag-live"><i class="live-dot"></i>실시간 · MQTT 발행</span>
               </div>
-              <p>사용이 예상된 구간에도 전력 변화가 없고, 대기전력 상태가 계속됩니다.</p>
+              <p>11:55부터 H001의 측정값 630개를 발행하고, 그래프는 평소와 같은 11:59:30~12:02:30 구간으로 시작해 12:05:29까지 늘어납니다. 12:00에 켠 전자레인지는 허용 사용시간 2분을 넘겨 12:05에야 꺼집니다.</p>
             </div>
             <div class="live-metric">
-              <span>현재 유효전력</span>
-              <strong id="anomalyPower">—</strong><em>W</em>
+              <span>가상 시각 <b id="liveClock">--:--:--</b></span>
+              <span>연속 사용 <b id="liveUsage">—</b></span>
+              <strong id="livePower">—</strong><em>W</em>
             </div>
           </div>
           <div class="chart-wrap">
-            <canvas id="anomalyChart" role="img" aria-label="전자레인지 사용이 누락되어 대기전력이 지속되는 이상 전력 파형"></canvas>
+            <canvas id="anomalyChart" role="img" aria-label="전자레인지가 허용 사용시간 2분을 넘겨 5분간 이어지는 실시간 발행 전력 파형"></canvas>
           </div>
           <div class="chart-caption">
-            <span><i class="legend-line legend-anomaly"></i>오늘의 실측 전력</span>
-            <span><i class="legend-dash"></i>평소 기대 파형</span>
-            <strong id="anomalyCaption">관찰 중</strong>
+            <span><i class="legend-line legend-anomaly"></i>금일 실측 전력 (발행값)</span>
+            <span><i class="legend-area"></i>평소 사용 구간 (약 90초)</span>
+            <span><i class="legend-marker"></i>허용 사용시간 2분 경과 지점</span>
+            <strong id="liveProgress">발행 0 / 630</strong>
+          </div>
+          <div class="card-controls">
+            <div class="controls">
+              <button id="liveStartButton" class="play-button" type="button">▶ 실시간 실행</button>
+              <button id="liveStopButton" class="reset-button" type="button" disabled>■ 중지</button>
+              <label class="speed-control">발행 속도
+                <select id="liveSpeedSelect" aria-label="실시간 발행 속도">
+                  <option value="1">1× (1초 간격)</option>
+                  <option value="5">5×</option>
+                  <option value="10" selected>10×</option>
+                </select>
+              </label>
+            </div>
+            <p id="liveMessage" class="live-message" aria-live="polite">실행하면 시뮬레이터가 H001 prolonged_use 시나리오를 MQTT로 발행하고, 브리지가 Kafka로 전달합니다.</p>
           </div>
         </article>
-      </div>
-
-      <div class="timeline-panel">
-        <div class="controls">
-          <button id="playButton" class="play-button" type="button">▶ 시연 시작</button>
-          <button id="resetButton" class="reset-button" type="button">↺ 처음부터</button>
-          <label class="speed-control">재생 속도
-            <select id="speedSelect" aria-label="시연 재생 속도">
-              <option value="1">1×</option>
-              <option value="5">5×</option>
-              <option value="10" selected>10×</option>
-            </select>
-          </label>
-        </div>
-        <div class="scrubber-wrap">
-          <input id="demoScrubber" type="range" min="0" max="120" value="0" aria-label="시연 재생 위치">
-          <div class="time-labels"><span>08:08:30</span><span>08:09:00 사용 예상</span><span>08:10:00 루틴 종료</span><span>08:10:30</span></div>
-        </div>
       </div>
     </section>
 
@@ -109,15 +123,15 @@
       <div id="storyIndex" class="story-index">01 / 03</div>
       <div>
         <p id="storyEyebrow">대기전력 관찰</p>
-        <h2 id="storyTitle">두 파형 모두 평온하게 시작합니다.</h2>
+        <h2 id="storyTitle">점심 준비 전에는 대기전력만 흐릅니다.</h2>
         <p id="storyBody">공유기·셋톱박스·냉장고 등에서 발생하는 약 50–65W의 기저부하가 유지됩니다.</p>
       </div>
       <div class="status-orbit" aria-hidden="true"><span></span><i></i></div>
     </section>
 
     <footer class="demo-footer">
-      <p>이 화면은 발표용 결정적 재생입니다. 정상 시나리오의 전자레인지 08:09–08:10 사용 계약을 기준으로 파형을 비교하며, 실제 이상 판정은 분석 윈도우가 충족된 뒤 수행됩니다.</p>
-      <span>normal_routine ↔ routine_missed</span>
+      <p>위 그래프는 평소 전자레인지 사용(12:00부터 약 90초)을 보여 주는 발표용 결정적 재생이며 데이터를 발행하지 않습니다. 아래 그래프는 시뮬레이터가 실제로 발행한 값입니다. 사용시간 초과(PROLONGED_APPLIANCE_USE) 판정은 AI 분석 서비스가 허용 사용시간 기준으로 수행합니다.</p>
+      <span>기록 재생 ↔ prolonged_use (실시간)</span>
     </footer>
   </main>
   <script src="assets/routine_demo.js"></script>

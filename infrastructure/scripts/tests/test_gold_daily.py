@@ -25,7 +25,7 @@ def bash_path(path: Path) -> str:
     return f"/{drive}/{tail}"
 
 
-def run_script(tmp_path: Path, *, docker_exit, flock_exit: int = 0):
+def run_script(tmp_path: Path, *, docker_exit, flock_exit: int = 0, report_enabled=False):
     """``docker_exit`` is one code for every call, or one code per call in order."""
 
     if os.name == "nt":
@@ -66,6 +66,7 @@ def run_script(tmp_path: Path, *, docker_exit, flock_exit: int = 0):
         "GOLD_DAILY_DOCKER_BIN": bash_path(fake_docker),
         "GOLD_DAILY_FLOCK_BIN": bash_path(fake_flock),
         "GOLD_DAILY_DATE_BIN": bash_path(fake_date),
+        "HOUSEHOLD_REPORT_ENABLED": "true" if report_enabled else "false",
     }
     result = subprocess.run(
         ["bash", bash_path(runner)], env=env, text=True, encoding="utf-8",
@@ -96,6 +97,17 @@ class GoldDailyRunnerTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1)
         self.assertEqual(len(calls), 1)
+
+    def test_reports_follow_only_completed_gold_dates(self):
+        result, calls = run_script(self.tmp_path, docker_exit=[10, 12, 0], report_enabled=True)
+        self.assertEqual(result.returncode, 10)
+        self.assertEqual(len(calls), 3)
+        self.assertIn('household-report daily --as-of 2026-09-20', calls[2])
+
+    def test_report_failure_is_propagated(self):
+        result, calls = run_script(self.tmp_path, docker_exit=[0, 1], report_enabled=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(len(calls), 2)
 
     def test_an_incomplete_older_date_does_not_starve_newer_dates(self):
         # The oldest date still waits for inputs (10); yesterday hands its outbox off (12).
