@@ -4,7 +4,16 @@ import re
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[3]
+def _repo_root():
+    for parent in Path(__file__).resolve().parents:
+        if (parent / 'infrastructure').is_dir():
+            return parent
+    return None
+
+
+ROOT = _repo_root()
+# The Docker test stage copies only tests/ to /app, so repo-level files are absent there.
+pytestmark = pytest.mark.skipif(ROOT is None, reason='repository checkout not available')
 
 
 def test_dashboard_queries_parse_and_use_fixed_snapshot():
