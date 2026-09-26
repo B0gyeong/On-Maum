@@ -36,7 +36,7 @@
       }
     },
     "event_type": "PROLONGED_APPLIANCE_USE",
-    "cooldown_hours": 24,
+    "cooldown_hours": 0,
     "enabled": true
   },
   {

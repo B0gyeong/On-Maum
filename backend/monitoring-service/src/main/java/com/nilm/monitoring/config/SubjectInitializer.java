@@ -15,14 +15,20 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * Creates ten self-service users and households through the real APIs, then
- * links their Keycloak subs to monitoring subjects.
+ * Creates self-service users and households through the real APIs, then links
+ * their Keycloak subs to monitoring subjects. Every test manager receives
+ * {@link #SUBJECTS_PER_MANAGER} subjects in household-ID order.
  */
 @Slf4j
 @Component
 @DependsOnDatabaseInitialization
 @ConditionalOnProperty(name = "app.test-data.enabled", havingValue = "true")
 public class SubjectInitializer implements SmartInitializingSingleton {
+
+    /** Subjects assigned to each manager created by {@link ManagerInitializer}. */
+    static final int SUBJECTS_PER_MANAGER = 30;
+    static final int SUBJECT_COUNT =
+            ManagerInitializer.ACCOUNT_COUNT * SUBJECTS_PER_MANAGER;
 
     private static final String LEGACY_AUTH_SUB = "test-subject-3";
     private static final String LEGACY_NAME = "테스트 대상자";
@@ -57,11 +63,11 @@ public class SubjectInitializer implements SmartInitializingSingleton {
         // Also guarantees ordering if Spring invokes the singleton callbacks
         // in a different bean order.
         managers.initialize();
-        for (int index = 1; index <= ManagerInitializer.ACCOUNT_COUNT; index++) {
+        for (int index = 1; index <= SUBJECT_COUNT; index++) {
             createOrLinkSubject(index);
         }
-        log.info("테스트 대상자 {}명의 계정·가구·subjects 연결 완료",
-                ManagerInitializer.ACCOUNT_COUNT);
+        log.info("테스트 대상자 {}명의 계정·가구·subjects 연결 완료 (담당자 1명당 {}명)",
+                SUBJECT_COUNT, SUBJECTS_PER_MANAGER);
     }
 
     private void createOrLinkSubject(int index) {
@@ -71,7 +77,7 @@ public class SubjectInitializer implements SmartInitializingSingleton {
         String houseId = String.format("H%03d", index);
         String alias = String.format("테스트 가구 %02d", index);
         String address = String.format("서울특별시 테스트로 %d", index);
-        LocalDate birthDate = LocalDate.of(1949 + index, 1, 1);
+        LocalDate birthDate = birthDateFor(index);
 
         TestDataApiClient.SeedAccount account = api.ensureUser(
                 email, password, name, phone, null
@@ -84,8 +90,20 @@ public class SubjectInitializer implements SmartInitializingSingleton {
                 name,
                 phone,
                 address,
-                managers.managerIdFor(index)
+                managers.managerIdFor(managerIndexFor(index))
         );
+    }
+
+    /** Subjects 1..30 belong to manager 1, 31..60 to manager 2, and so on. */
+    static int managerIndexFor(int subjectIndex) {
+        return (subjectIndex - 1) / SUBJECTS_PER_MANAGER + 1;
+    }
+
+    /** Spreads birth dates over 1935-1974 so 300 subjects stay in a plausible range. */
+    private static LocalDate birthDateFor(int index) {
+        int year = 1935 + (index - 1) % 40;
+        int month = (index - 1) % 12 + 1;
+        return LocalDate.of(year, month, 1);
     }
 
     private void linkSubject(
