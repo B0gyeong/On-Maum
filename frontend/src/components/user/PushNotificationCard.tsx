@@ -1,4 +1,5 @@
 import type { PushSubscriptionStatus } from "../../services/pushSubscription";
+import alertIcon from "../../assets/user/alert.svg";
 
 type PushNotificationCardProps = {
   status: PushSubscriptionStatus;
@@ -17,9 +18,17 @@ export default function PushNotificationCard({
 
   if (status === "subscribed") {
     return (
-      <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4" role="status">
-        <strong className="text-emerald-900">안심 알림이 켜져 있어요</strong>
-        <p className="mt-1 text-stone-600">도움이 필요할 때 이 기기로 알려드릴게요.</p>
+      <section
+        className="flex gap-4 items-center min-w-0 rounded-3xl border border-stone-200 bg-white p-6 shadow-[0_2px_10px_rgb(15_23_42_/_3%)] max-[359px]:p-5"
+        role="status"
+      >
+        <div className="size-10">
+          <img src={alertIcon} />
+        </div>
+        <div>
+          <p className="text-lg">안심 알림</p>
+          <p className="text-2xl font-bold text-emerald-700">켜져 있어요</p>
+        </div>
       </section>
     );
   }
@@ -30,8 +39,9 @@ export default function PushNotificationCard({
       className="min-w-0 rounded-3xl border border-stone-200 bg-white p-6 shadow-[0_2px_10px_rgb(15_23_42_/_3%)] max-[359px]:p-5"
       aria-labelledby="push-title"
     >
-      <h2 className="text-xl font-bold" id="push-title">
-        안심 알림 받기
+      <p className="text-lg">안심 알림</p>
+      <h2 className="text-2xl font-bold" id="push-title">
+        알림을 켜 주세요
       </h2>
       <p className="mt-2 text-stone-600">
         {denied
@@ -44,7 +54,7 @@ export default function PushNotificationCard({
         </p>
       )}
       <button
-        className="mt-5 flex min-h-16 w-full items-center justify-center rounded-2xl border border-stone-300 bg-white px-4 py-3.5 text-center text-[1.3125rem] leading-6 font-semibold text-stone-800 shadow-[0_4px_0_#d6d3d1,0_7px_14px_rgb(15_23_42_/_6%)] transition-[transform,box-shadow,background-color] duration-150 hover:not-disabled:bg-stone-50 active:not-disabled:translate-y-[3px] active:not-disabled:shadow-[0_1px_0_#d6d3d1,0_3px_6px_rgb(15_23_42_/_6%)] disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-200 disabled:text-stone-600 disabled:shadow-none"
+        className="mt-4 flex min-h-16 w-full items-center justify-center rounded-full border border-[#b9c1c9] bg-[linear-gradient(180deg,#ffffff_0%,#f1f3f5_58%,#e3e7eb_100%)] px-7 py-3.5 text-center text-[1.3125rem] leading-6 font-semibold text-stone-800 shadow-[inset_0_1px_0_rgb(255_255_255_/_90%),0_5px_0_#b1bac3,0_9px_18px_rgb(15_23_42_/_10%)] transition-[transform,box-shadow,filter] duration-150 hover:brightness-[.99] active:translate-y-[3px] active:shadow-[inset_0_1px_0_rgb(255_255_255_/_70%),0_2px_0_#b1bac3,0_4px_8px_rgb(15_23_42_/_8%)] disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-200 disabled:text-stone-600 disabled:shadow-none"
         disabled={status === "syncing"}
         onClick={status === "error" || denied ? onRetry : onEnable}
       >

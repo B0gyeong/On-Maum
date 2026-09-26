@@ -5,6 +5,8 @@ import type { SubjectsResponse } from "../../api/monitoring";
 import { readSubjectStream } from "../../api/stream";
 import type { StatusEvent } from "../../types/monitoring";
 import { monitoringKeys } from "../api/monitoringKeys";
+import { addStaffNotice, createStaffNotice } from "../../utils/staffNotices";
+import type { StaffNotice } from "../../utils/staffNotices";
 
 export function useSubjectStream() {
   const queryClient = useQueryClient();
@@ -12,13 +14,15 @@ export function useSubjectStream() {
     "connecting",
   );
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState<StatusEvent | null>(null);
+  const [notices, setNotices] = useState<StaffNotice[]>([]);
+  const [history, setHistory] = useState<StaffNotice[]>([]);
 
   useEffect(() => {
     let active = true;
     let retries = 0;
     let timer: number | undefined;
     let controller: AbortController | undefined;
+    const receivedVersions = new Map<string, number>();
 
     const connect = async () => {
       controller = new AbortController();
@@ -38,6 +42,11 @@ export function useSubjectStream() {
           (eventName, payload) => {
             if (!active || eventName !== "subject-status") return;
             const event = payload as StatusEvent;
+            const previous = queryClient.getQueryData<SubjectsResponse>(monitoringKeys.subjects)
+              ?.subjects.find((subject) => subject.subjectId === event.subjectId);
+            if (event.version <= (receivedVersions.get(event.subjectId) ?? -1)
+              || (previous && event.version < previous.version)) return;
+            receivedVersions.set(event.subjectId, event.version);
             queryClient.setQueryData<SubjectsResponse>(monitoringKeys.subjects, (current) =>
               current
                 ? {
@@ -49,8 +58,11 @@ export function useSubjectStream() {
                   }
                 : current,
             );
-            if (event.riskLevel === "DANGER" || event.trigger === "SUBJECT_RESPONSE")
-              setNotice(event);
+            const notice = createStaffNotice(event, previous);
+            if (notice) {
+              setNotices((current) => addStaffNotice(current, notice));
+              setHistory((current) => addStaffNotice(current, notice));
+            }
           },
         );
       } catch (cause) {
@@ -75,5 +87,9 @@ export function useSubjectStream() {
     };
   }, [queryClient]);
 
-  return { connection, error, notice, setNotice };
+  const dismissNotice = (id: string) => {
+    setNotices((current) => current.filter((notice) => notice.id !== id));
+  };
+
+  return { connection, error, notices, history, dismissNotice };
 }

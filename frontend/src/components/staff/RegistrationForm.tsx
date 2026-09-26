@@ -1,9 +1,10 @@
+import { motion, useReducedMotion } from "motion/react";
 import type { FormEvent } from "react";
 import { getApiErrorMessage } from "../../api/client";
 import { useRegisterSubjectMutation } from "../../hooks/api";
 import type { SubjectRegistration } from "../../types/monitoring";
 import { todayInSeoul } from "../../utils/format";
-import Icon from "../common/Icon";
+
 
 const inputClass =
   "h-12 rounded-xl border border-stone-300 px-4 outline-none focus:border-brand-500 focus:ring-3 focus:ring-brand-100";
@@ -21,11 +22,17 @@ export default function RegistrationForm({
     const values = Object.fromEntries(new FormData(event.currentTarget)) as SubjectRegistration;
     registration.mutate(values, { onSuccess: onDone });
   };
+  const reduceMotion = useReducedMotion();
+
   return (
-    <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+    <motion.section
+      initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="rounded-xl border border-stone-200/70 bg-white p-7"
+    >
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-xl font-bold">
-          <Icon name="users" />
           대상자 등록
         </h2>
         <button
@@ -90,12 +97,12 @@ export default function RegistrationForm({
           </p>
         )}
         <button
-          className="h-12 rounded-xl bg-brand-500 font-bold text-brand-900 hover:bg-brand-400 disabled:bg-stone-300"
+          className="h-12 rounded-xl bg-brand-500 font-bold text-white hover:bg-brand-600 disabled:bg-stone-300"
           disabled={registration.isPending}
         >
           {registration.isPending ? "등록 중…" : "대상자 등록"}
         </button>
       </form>
-    </section>
+    </motion.section>
   );
 }

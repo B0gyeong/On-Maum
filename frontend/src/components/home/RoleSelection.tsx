@@ -25,7 +25,7 @@ export default function RoleSelection() {
           to={role.to}
           key={role.to}
         >
-          <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand-500 text-brand-900">
+          <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand-500 text-white">
             <Icon name={role.icon} />
           </span>
           <span className="flex-1">

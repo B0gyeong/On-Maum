@@ -1,6 +1,7 @@
+import { motion, useReducedMotion } from "motion/react";
 import type { Subject } from "../../types/monitoring";
 import { responseLabel, riskLabels } from "../../types/monitoring";
-import { formatDateTime, riskBadgeClass } from "../../utils/format";
+import { formatDateTime, riskBadgeClass, telephoneHref } from "../../utils/format";
 import Icon from "../common/Icon";
 
 export function PreviewDangerAlert({ occurredAt, onClose }: { occurredAt: string; onClose: () => void }) {
@@ -15,10 +16,10 @@ export function PreviewDangerAlert({ occurredAt, onClose }: { occurredAt: string
         </span>
         <div className="min-w-0 flex-1">
           <strong className="block text-red-900">박정수님의 위험 신호가 감지되었습니다.</strong>
-          <p className="mt-1 text-sm leading-5 text-stone-600">
-            장시간 활동이 확인되지 않았습니다. 즉시 안전 상태를 확인해 주세요.
+          <p className="mt-1 text-base leading-6 text-stone-600">
+            92점 · 대상자의 안전 상태를 확인해 주세요.
           </p>
-          <time className="mt-1 block text-xs text-stone-500">{formatDateTime(occurredAt)}</time>
+          <time className="mt-1 block text-sm text-stone-500">{formatDateTime(occurredAt)}</time>
         </div>
         <button
           className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-stone-500 hover:bg-stone-100"
@@ -36,54 +37,58 @@ export function PreviewDangerAlert({ occurredAt, onClose }: { occurredAt: string
 }
 
 export function PreviewSubjectTable({ subjects }: { subjects: Subject[] }) {
+  const reduceMotion = useReducedMotion();
   const sortedSubjects = [...subjects].sort((a, b) => b.riskScore - a.riskScore);
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+    <section className="overflow-hidden rounded-xl border border-stone-200/70 bg-white">
       <div className="border-b border-stone-100 p-5">
         <h2 className="flex items-center gap-2 text-xl font-bold">
           <Icon name="users" /> 등록 대상자
         </h2>
-        <p className="mt-1 text-sm text-stone-500">위험 점수가 높은 순서로 표시됩니다.</p>
+        <p className="mt-1 text-base text-stone-500">위험 점수가 높은 순서로 표시됩니다.</p>
       </div>
-      <div className="overflow-x-auto">
+      <motion.div layoutScroll className="overflow-x-auto">
         <table className="w-full min-w-4xl text-left">
-          <thead className="bg-stone-50 text-sm text-stone-500">
+          <thead className="bg-stone-50 text-base text-stone-500">
             <tr>
-              <th className="p-4">대상자 정보</th>
+              <th className="p-4">확인 순서 · 대상자</th>
+              <th>전화번호</th>
               <th>위험 단계</th>
-              <th>위험 점수</th>
+              <th>현재 위험 점수</th>
               <th>최근 알림 응답</th>
-              <th>마지막 가전 활동</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100">
-            {sortedSubjects.map((subject) => (
-              <tr
+            {sortedSubjects.map((subject, index) => (
+              <motion.tr
+                layout={reduceMotion ? false : "position"}
+                transition={{ layout: { type: "spring", stiffness: 120, damping: 24, mass: 1 } }}
                 className={subject.riskLevel === "DANGER" ? "bg-red-50" : "hover:bg-stone-50"}
                 key={subject.subjectId}
               >
                 <td className="p-4">
-                  <strong>{subject.name} · {subject.age}세</strong>
-                  <small className="block text-stone-500">{subject.address}</small>
+                  <strong><span className="mr-3 text-base font-medium text-stone-400">{index + 1}</span>{subject.name} · {subject.age}세</strong>
+                  <small className="mt-1 block text-[0.9375rem] leading-6 text-stone-500">{subject.address || "주소 미등록"}</small>
                 </td>
                 <td>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ring-1 ${riskBadgeClass(subject.riskLevel)}`}>
+                  {subject.phone ? (
+                    <a className="text-base text-stone-600 hover:text-brand-700 hover:underline" href={telephoneHref(subject.phone)}>{subject.phone}</a>
+                  ) : "미등록"}
+                </td>
+                <td>
+                  <span className={`rounded-full px-3 py-1 text-sm font-bold ring-1 ${riskBadgeClass(subject.riskLevel)}`}>
                     {riskLabels[subject.riskLevel]}
                   </span>
                 </td>
                 <td className="font-bold">{subject.riskScore}점</td>
                 <td>{responseLabel(subject.latestAlert?.subjectResponse)}</td>
-                <td>
-                  {formatDateTime(subject.lastActivity?.occurredAt)}
-                  <small className="block text-stone-500">{subject.lastActivity?.applianceType}</small>
-                </td>
-              </tr>
+              </motion.tr>
             ))}
           </tbody>
         </table>
-      </div>
-      <footer className="border-t border-stone-100 p-4 text-sm text-stone-500">
+      </motion.div>
+      <footer className="border-t border-stone-100 p-4 text-base text-stone-500">
         총 {subjects.length}명 표시
       </footer>
     </section>

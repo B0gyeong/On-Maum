@@ -1,7 +1,6 @@
+import { motion, useReducedMotion } from "motion/react";
 import type { Subject, Risk } from "../../types/monitoring";
 import { riskLabels } from "../../types/monitoring";
-import Icon from "../common/Icon";
-import type { IconName } from "../common/Icon";
 
 export default function OverviewMetrics({
   subjects,
@@ -11,44 +10,47 @@ export default function OverviewMetrics({
   loading: boolean;
 }) {
   const metrics = [
-    {
-      label: "담당 대상자",
-      value: subjects.length,
-      icon: "users" as IconName,
-      style: "bg-brand-100 text-brand-700",
-    },
     ...(["DANGER", "WARNING", "NORMAL"] as Risk[]).map((risk) => ({
       label: riskLabels[risk],
       value: subjects.filter((subject) => subject.riskLevel === risk).length,
-      icon: "shield" as IconName,
-      style:
+      valueStyle:
         risk === "DANGER"
-          ? "bg-red-100 text-red-700"
+          ? "text-red-600"
           : risk === "WARNING"
-            ? "bg-amber-100 text-amber-700"
-            : "bg-emerald-100 text-emerald-700",
+            ? "text-brand-600"
+            : "text-stone-700",
     })),
   ];
 
+  const reduceMotion = useReducedMotion();
+
   return (
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="대상자 현황">
+    <motion.section
+      initial={reduceMotion ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.2 }}
+      className="space-y-4"
+      aria-label="대상자 현황"
+    >
+      <p className="flex items-baseline gap-2 text-base font-medium text-stone-600">
+        담당 대상자
+        <strong className="text-2xl font-semibold tabular-nums text-stone-900">{loading ? "—" : subjects.length}</strong>
+        <span>명</span>
+      </p>
+      <div className="grid grid-cols-3 divide-x divide-stone-200 rounded-xl border border-stone-200 bg-white py-5">
       {metrics.map((metric) => (
         <article
-          className="flex items-center justify-between rounded-2xl border border-stone-200 bg-white p-5 shadow-sm"
+          className="px-5 md:px-7"
           key={metric.label}
         >
-          <div>
-            <span className="text-sm text-stone-500">{metric.label}</span>
-            <strong className="mt-2 block text-3xl">
-              {loading ? "—" : metric.value}
-              <small className="ml-1 text-sm">명</small>
-            </strong>
-          </div>
-          <span className={`grid h-11 w-11 place-items-center rounded-xl ${metric.style}`}>
-            <Icon name={metric.icon} />
-          </span>
+          <span className="text-base font-medium text-stone-600">{metric.label}</span>
+          <strong className={`mt-2 block text-3xl font-semibold tabular-nums ${metric.valueStyle}`}>
+            {loading ? "—" : metric.value}
+            <small className="ml-1 text-base font-semibold text-stone-500">명</small>
+          </strong>
         </article>
       ))}
-    </section>
+      </div>
+    </motion.section>
   );
 }
