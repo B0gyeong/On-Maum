@@ -180,6 +180,40 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # 시연용 시뮬레이터. 배포(deploy.sh)에서는 띄우지 않으며 필요할 때만 수동으로 기동한다.
+  #   docker compose --profile simulator up -d simulator
+  # 접속은 frontend nginx의 https://<APP_DOMAIN>/simulator/ (기본 인증)로 한다.
+  # 제어 API에 인증이 없으므로 호스트 포트는 루프백에만 열어 SSH 터널 접속용으로만 남긴다.
+  simulator:
+    image: ${SIMULATOR_IMAGE:?SIMULATOR_IMAGE required}
+    profiles: ["simulator"]
+    restart: unless-stopped
+    environment:
+      # profile로 꺼져 있어도 compose는 전체 파일을 보간하므로 필수(:?)로 두지 않는다.
+      MQTT_HOST: ${SIMULATOR_MQTT_HOST:-}
+      MQTT_PORT: 8883
+      MQTT_TLS_ENABLED: "true"
+      MQTT_USER: ${SIMULATOR_MQTT_USER:-simulator_user}
+      MQTT_PASS: ${SIMULATOR_MQTT_PASS:-}
+      MQTT_CA_FILE: /certs/ca.crt
+    ports:
+      - "127.0.0.1:${SIMULATOR_WEB_PORT:-8085}:8085"
+    volumes:
+      - type: bind
+        source: ${SIMULATOR_MQTT_CA_FILE:-/opt/nilm/mqtt/certs/ca.crt}
+        target: /certs/ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      mosquitto:
+        condition: service_started
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   frontend:
     image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE required}
     restart: unless-stopped
@@ -193,6 +227,8 @@ services:
     volumes:
       - ${CONFIG_ROOT:-.}/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
       - ${CONFIG_ROOT:-.}/certs:/etc/nginx/certs:ro
+      # /simulator/ 기본 인증 파일(simulator.htpasswd). 서버에서 직접 만들며 저장소에 넣지 않는다.
+      - ${CONFIG_ROOT:-.}/nginx/auth:/etc/nginx/auth:ro
     depends_on:
       api-gateway:
         condition: service_healthy

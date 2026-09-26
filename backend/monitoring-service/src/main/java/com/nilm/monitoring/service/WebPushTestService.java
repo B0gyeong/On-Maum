@@ -14,7 +14,7 @@ public class WebPushTestService {
     public Map<String, Object> sendTest() {
         var notification = notificationService.createNotification(null, true);
         return dispatcher.dispatch(new NotificationReady(notification.getId(),
-                "안전 확인 테스트", "현재 안전하신가요? 예 또는 아니오로 응답해 주세요."));
+                "안전 확인 테스트", NotificationReady.RESPONSE_QUESTION + " 예 또는 아니오로 응답해 주세요."));
     }
 }
 

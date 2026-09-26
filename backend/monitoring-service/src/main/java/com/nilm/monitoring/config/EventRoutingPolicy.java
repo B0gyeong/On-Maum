@@ -67,7 +67,7 @@ public class EventRoutingPolicy {
         Set<String> away = Set.of();
         Set<String> deviceOffline = Set.of();
         Set<String> response = Set.of();
-        Duration deadline = Duration.ofSeconds(1800);
+        Duration deadline = Duration.ofSeconds(60);
 
         for (Map.Entry<String, String> entry : properties.getEventRouting().entrySet()) {
             String key = normalize(entry.getKey());

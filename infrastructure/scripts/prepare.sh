@@ -29,7 +29,7 @@ if [[ "$target" == "b" ]]; then
 fi
 install -m 644 release.json /opt/nilm/release.json
 if [[ "$target" == a ]]; then
-  install -d /opt/nilm/keycloak /opt/nilm/nginx /opt/nilm/mqtt /opt/nilm/observability
+  install -d /opt/nilm/keycloak /opt/nilm/nginx /opt/nilm/nginx/auth /opt/nilm/mqtt /opt/nilm/observability
   install -m 644 infrastructure/keycloak/nilm-realm.json /opt/nilm/keycloak/nilm-realm.json
   install -m 644 infrastructure/nginx/default.conf.template /opt/nilm/nginx/default.conf.template
   install -m 644 infrastructure/mqtt/config/mosquitto.production.conf /opt/nilm/mqtt/mosquitto.conf

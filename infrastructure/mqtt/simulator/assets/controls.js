@@ -191,7 +191,7 @@
       });
 
       try {
-        const res = await fetch('/api/start', {
+        const res = await fetch('api/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -264,7 +264,7 @@
 
       if (!isPaused) {
         try {
-          const res = await fetch('/api/pause', { method: 'POST' });
+          const res = await fetch('api/pause', { method: 'POST' });
           if (!res.ok) {
             let errMsg = `일시정지 실패 (${res.status})`;
             try {
@@ -287,7 +287,7 @@
         powerflowSetRunState('paused');
       } else {
         try {
-          const res = await fetch('/api/resume', { method: 'POST' });
+          const res = await fetch('api/resume', { method: 'POST' });
           if (!res.ok) {
             let errMsg = `재개 실패 (${res.status})`;
             try {
@@ -316,7 +316,7 @@
 
       if (isServerConnected) {
         try {
-          const res = await fetch('/api/stop', { method: 'POST' });
+          const res = await fetch('api/stop', { method: 'POST' });
           if (!res.ok) {
             isSimulationRunning = wasRunning;
             let errMsg = `정지 실패 (${res.status})`;
@@ -361,7 +361,7 @@
 
       if (isServerConnected) {
         try {
-          const res = await fetch('/api/reset', { method: 'POST' });
+          const res = await fetch('api/reset', { method: 'POST' });
           if (!res.ok) {
             isSimulationRunning = wasRunning;
             let errMsg = `초기화 실패 (${res.status})`;
@@ -488,7 +488,7 @@
 
       const targetInterval = newMs / 1000.0;
       try {
-        const res = await fetch('/api/speed', {
+        const res = await fetch('api/speed', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ interval: targetInterval })

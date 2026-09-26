@@ -257,7 +257,8 @@ public class RiskAssessmentService {
             publisher.publishEvent(new NotificationReady(
                     notification.getId(),
                     "안전 확인 요청",
-                    "생활 패턴이 평소와 달라 안전을 확인하고 있습니다. 현재 안전하신가요?"
+                    "생활 패턴이 평소와 달라 안전을 확인하고 있습니다. "
+                            + NotificationReady.RESPONSE_QUESTION
             ));
         } else {
             log.info("담당자 수신 설정이 꺼져 있어 발송하지 않는다: subjectId={}, level={}",

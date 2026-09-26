@@ -117,7 +117,7 @@
       const select = document.getElementById('e2eScenarioSelect');
       if (!select) return;
       try {
-        const resp = await fetch('/api/e2e/scenarios');
+        const resp = await fetch('api/e2e/scenarios');
         const data = await resp.json();
         if (data && Array.isArray(data.scenarios)) {
           e2eScenarios = data.scenarios;
@@ -205,7 +205,7 @@
 
       e2eClearMessage();
       try {
-        const resp = await fetch('/api/e2e/runs', {
+        const resp = await fetch('api/e2e/runs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -241,7 +241,7 @@
       }
       e2eClearMessage();
       try {
-        const resp = await fetch(`/api/e2e/runs/${runId}`);
+        const resp = await fetch(`api/e2e/runs/${runId}`);
         if (resp.status === 200) {
           const data = await resp.json();
           e2eCurrentRunId = runId;
@@ -267,7 +267,7 @@
       const btnStop = document.getElementById('e2eBtnStop');
       if (btnStop) btnStop.disabled = true;
       try {
-        const resp = await fetch(`/api/e2e/runs/${e2eCurrentRunId}/stop`, {
+        const resp = await fetch(`api/e2e/runs/${e2eCurrentRunId}/stop`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         });
@@ -288,7 +288,7 @@
     async function e2eHouseholdAction(householdId, action) {
       if (!e2eCurrentRunId) return;
       try {
-        const resp = await fetch(`/api/e2e/runs/${e2eCurrentRunId}/households/${householdId}/${action}`, {
+        const resp = await fetch(`api/e2e/runs/${e2eCurrentRunId}/households/${householdId}/${action}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         });
@@ -322,7 +322,7 @@
         return;
       }
       try {
-        const resp = await fetch(`/api/e2e/runs/${e2eCurrentRunId}`);
+        const resp = await fetch(`api/e2e/runs/${e2eCurrentRunId}`);
         if (!resp.ok) {
           e2eShowMessage(`상태 조회 실패 (HTTP ${resp.status})`);
           // 요구사항 7: 4xx, 5xx 오류 시에도 폴링 유지

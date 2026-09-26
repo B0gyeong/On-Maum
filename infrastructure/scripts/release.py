@@ -21,6 +21,7 @@ SERVICES = {
     "session-lake-loader": "SESSION_LAKE_LOADER_IMAGE",
     "power-silver": "POWER_SILVER_IMAGE",
     "gold-profile": "GOLD_PROFILE_IMAGE",
+    "simulator": "SIMULATOR_IMAGE",
 }
 TARGETS = {
     "a": (
@@ -28,6 +29,7 @@ TARGETS = {
         "iot-device-service",
         "monitoring-service",
         "frontend",
+        "simulator",
     ),
     "b": (
         "realtime-analysis-service",

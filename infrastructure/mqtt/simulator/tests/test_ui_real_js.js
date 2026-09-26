@@ -434,7 +434,7 @@ async function runTests() {
   // 일시정지 실행
   await togglePause();
   assert.strictEqual(fetchCalls.length, 1, "API 호출이 1회 발생해야 합니다.");
-  assert.strictEqual(fetchCalls[0].url, "/api/pause", "호출 엔드포인트가 /api/pause여야 합니다.");
+  assert.strictEqual(fetchCalls[0].url, "api/pause", "호출 엔드포인트가 /api/pause여야 합니다.");
   assert.strictEqual(getGlobal('isPaused'), true, "isPaused 상태가 true여야 합니다.");
   assert.strictEqual(getOrCreateElement('btnPause').textContent, "재생", "버튼 라벨이 '재생'이어야 합니다.");
   assert.strictEqual(getOrCreateElement('badgeStatus').textContent, "일시정지됨", "뱃지가 '일시정지됨'이어야 합니다.");
@@ -447,7 +447,7 @@ async function runTests() {
   // 재개 실행
   await togglePause();
   assert.strictEqual(fetchCalls.length, 2, "API 호출이 2회 발생해야 합니다.");
-  assert.strictEqual(fetchCalls[1].url, "/api/resume", "호출 엔드포인트가 /api/resume여야 합니다.");
+  assert.strictEqual(fetchCalls[1].url, "api/resume", "호출 엔드포인트가 /api/resume여야 합니다.");
   assert.strictEqual(getGlobal('isPaused'), false, "isPaused 상태가 false여야 합니다.");
   assert.strictEqual(getOrCreateElement('btnPause').textContent, "일시정지", "버튼 라벨이 '일시정지'여야 합니다.");
   console.log("✔ Test 5 통과: 실제 pause/resume 엔드포인트 연동 및 상태 보존 확인");
@@ -472,7 +472,7 @@ async function runTests() {
   console.log("\n[Test 7] resetSimulation 실패 처리 및 EventSource 유지 검증");
 
   // 가짜 EventSource 생성 및 등록
-  const testEvtSource = new MockEventSource("/api/stream");
+  const testEvtSource = new MockEventSource("api/stream");
   sandbox.testEvtSource = testEvtSource;
   vm.runInContext('evtSource = testEvtSource', context);
   assert.strictEqual(getGlobal('evtSource'), testEvtSource);
@@ -523,8 +523,8 @@ async function runTests() {
   await startMultiSimulationFn();
 
   assert.strictEqual(fetchCalls.length, 1, "startMultiSimulation 중단 시 /api/reset만 호출되어야 합니다.");
-  assert.strictEqual(fetchCalls[0].url, "/api/reset", "첫 호출은 /api/reset이어야 합니다.");
-  const hasStartCall = fetchCalls.some(call => call.url === "/api/start");
+  assert.strictEqual(fetchCalls[0].url, "api/reset", "첫 호출은 /api/reset이어야 합니다.");
+  const hasStartCall = fetchCalls.some(call => call.url === "api/start");
   assert.strictEqual(hasStartCall, false, "reset 실패 시 /api/start가 절대 호출되어서는 안 됩니다.");
 
   // 3. fetch가 HTTP 200 성공을 반환할 때 정상 초기화 및 EventSource.close() 호출 검증
@@ -558,8 +558,8 @@ async function runTests() {
 
   // reset 호출 후 start 호출 확인
   assert.strictEqual(fetchCalls.length, 2, "reset과 start 총 2회 호출되어야 합니다.");
-  assert.strictEqual(fetchCalls[0].url, "/api/reset", "첫 번째 호출은 /api/reset이어야 합니다.");
-  assert.strictEqual(fetchCalls[1].url, "/api/start", "두 번째 호출은 /api/start이어야 합니다.");
+  assert.strictEqual(fetchCalls[0].url, "api/reset", "첫 번째 호출은 /api/reset이어야 합니다.");
+  assert.strictEqual(fetchCalls[1].url, "api/start", "두 번째 호출은 /api/start이어야 합니다.");
 
   const startReqNormal = JSON.parse(fetchCalls[1].options.body);
   assert.strictEqual(startReqNormal.households.length, 1, "H001 가구 1개만 요청되어야 합니다.");
@@ -576,8 +576,8 @@ async function runTests() {
   await startRoutineMissedDemo();
 
   assert.strictEqual(fetchCalls.length, 2, "reset과 start 총 2회 호출되어야 합니다.");
-  assert.strictEqual(fetchCalls[0].url, "/api/reset", "첫 번째 호출은 /api/reset이어야 합니다.");
-  assert.strictEqual(fetchCalls[1].url, "/api/start", "두 번째 호출은 /api/start이어야 합니다.");
+  assert.strictEqual(fetchCalls[0].url, "api/reset", "첫 번째 호출은 /api/reset이어야 합니다.");
+  assert.strictEqual(fetchCalls[1].url, "api/start", "두 번째 호출은 /api/start이어야 합니다.");
 
   const startReqMissed = JSON.parse(fetchCalls[1].options.body);
   assert.strictEqual(startReqMissed.households.length, 1, "H001 가구 1개만 요청되어야 합니다.");
@@ -587,7 +587,7 @@ async function runTests() {
 
   // Test 10: 원클릭 버튼에서 reset 실패 시(503 등) /api/start 중단 및 상태 보존 검증
   console.log("\n[Test 10] 원클릭 실행 시 초기화 실패(503) 방어 및 SSE/상태 보존 검증");
-  const demoEvtSource = new MockEventSource("/api/stream");
+  const demoEvtSource = new MockEventSource("api/stream");
   sandbox.testDemoEvtSource = demoEvtSource;
   vm.runInContext('evtSource = testDemoEvtSource', context);
 
@@ -609,7 +609,7 @@ async function runTests() {
   await startNormalRoutineDemo();
 
   assert.strictEqual(fetchCalls.length, 1, "reset 실패 시 /api/reset 1회만 호출되어야 합니다.");
-  assert.strictEqual(fetchCalls[0].url, "/api/reset", "호출 엔드포인트는 /api/reset이어야 합니다.");
+  assert.strictEqual(fetchCalls[0].url, "api/reset", "호출 엔드포인트는 /api/reset이어야 합니다.");
   assert.strictEqual(demoEvtSource.closeCalled, false, "reset 실패 시 기존 EventSource가 닫히지 않아야 합니다.");
   assert.ok(getGlobal('evtSource') !== null, "evtSource가 유지되어야 합니다.");
   assert.ok(noticeErrorCalledWith !== null, "사용자에게 에러 메시지가 표시되어야 합니다.");
@@ -627,7 +627,7 @@ async function runTests() {
   const changeSpeedFunc = getGlobal('changeSpeed');
   await changeSpeedFunc("100");
   assert.strictEqual(fetchCalls.length, 1, "reset 실패 후 실행 유지 상태에서는 changeSpeed()가 /api/speed를 호출해야 합니다.");
-  assert.strictEqual(fetchCalls[0].url, "/api/speed");
+  assert.strictEqual(fetchCalls[0].url, "api/speed");
 
   fetchCalls.length = 0;
   mockFetchResponse = {
@@ -637,7 +637,7 @@ async function runTests() {
   };
   await startRoutineMissedDemo();
   assert.strictEqual(fetchCalls.length, 1, "routine_missed 원클릭에서도 reset 실패 시 /api/start가 호출되지 않아야 합니다.");
-  assert.strictEqual(fetchCalls[0].url, "/api/reset");
+  assert.strictEqual(fetchCalls[0].url, "api/reset");
   assert.strictEqual(getGlobal('isSimulationRunning'), true, "두 번째 reset 실패 후에도 isSimulationRunning=true 유지");
   console.log("✔ Test 10 통과: 원클릭 시연 버튼의 reset 503 실패 방어 및 SSE 보존 확인");
 
@@ -841,10 +841,10 @@ async function runTests() {
     assert.ok(typeof startMultiSimulation === 'function', "startMultiSimulation 함수 존재");
     await startMultiSimulation();
 
-    const startCall = fetchCalls.find(c => c.url === '/api/start');
-    assert.ok(startCall, "/api/start 요청이 발생해야 합니다.");
+    const startCall = fetchCalls.find(c => c.url === 'api/start');
+    assert.ok(startCall, "api/start 요청이 발생해야 합니다.");
     const startPayload = JSON.parse(startCall.options.body);
-    assert.strictEqual(startPayload.interval, 0.1, "/api/start에 interval: 0.1이 전달되어야 합니다.");
+    assert.strictEqual(startPayload.interval, 0.1, "api/start에 interval: 0.1이 전달되어야 합니다.");
     assert.strictEqual(getGlobal('isSimulationRunning'), true, "시작 성공 후 isSimulationRunning=true 여야 합니다.");
     console.log("✔ Test 17 통과: startMultiSimulation()이 선택한 interval(0.1s)을 /api/start에 정상 전달");
   }
@@ -863,7 +863,7 @@ async function runTests() {
 
     const startNormalRoutineDemo = getGlobal('startNormalRoutineDemo');
     await startNormalRoutineDemo();
-    const normalCall = fetchCalls.find(c => c.url === '/api/start');
+    const normalCall = fetchCalls.find(c => c.url === 'api/start');
     assert.ok(normalCall, "normal_routine 시작 호출 발생");
     const normalPayload = JSON.parse(normalCall.options.body);
     assert.strictEqual(normalPayload.interval, 0.2, "정상 루틴 실행 시 interval: 0.2가 전달되어야 합니다.");
@@ -872,7 +872,7 @@ async function runTests() {
     fetchCalls.length = 0;
     const startRoutineMissedDemo = getGlobal('startRoutineMissedDemo');
     await startRoutineMissedDemo();
-    const missedCall = fetchCalls.find(c => c.url === '/api/start');
+    const missedCall = fetchCalls.find(c => c.url === 'api/start');
     assert.ok(missedCall, "routine_missed 시작 호출 발생");
     const missedPayload = JSON.parse(missedCall.options.body);
     assert.strictEqual(missedPayload.interval, 0.5, "이상 감지 실행 시 interval: 0.5가 전달되어야 합니다.");
@@ -895,7 +895,7 @@ async function runTests() {
     setGlobal('isSimulationRunning', true);
     await changeSpeed("200");
 
-    const speedCall = fetchCalls.find(c => c.url === '/api/speed');
+    const speedCall = fetchCalls.find(c => c.url === 'api/speed');
     assert.ok(speedCall, "실행 중 /api/speed 요청이 전송되어야 합니다.");
     const speedPayload = JSON.parse(speedCall.options.body);
     assert.strictEqual(speedPayload.interval, 0.2, "interval: 0.2가 /api/speed로 전송되어야 합니다.");
@@ -910,7 +910,7 @@ async function runTests() {
     setGlobal('isSimulationRunning', false);
     fetchCalls.length = 0;
     await changeSpeed("500");
-    const noSpeedCall = fetchCalls.find(c => c.url === '/api/speed');
+    const noSpeedCall = fetchCalls.find(c => c.url === 'api/speed');
     assert.strictEqual(noSpeedCall, undefined, "시뮬레이션 시작 전에는 /api/speed를 호출하지 않아야 합니다.");
     assert.strictEqual(getGlobal('intervalMs'), 500, "시작 전 변경값은 로컬 intervalMs에 정상 저장되어야 합니다.");
     console.log("✔ Test 20 통과: 시작 전 배속 변경 시 API 미호출 확인");
@@ -929,7 +929,7 @@ async function runTests() {
       json: async () => ({ status: "speed_updated", interval: 0.1, speed: 10.0 })
     };
     await changeSpeed("100");
-    const pausedSpeedCall = fetchCalls.find(c => c.url === '/api/speed');
+    const pausedSpeedCall = fetchCalls.find(c => c.url === 'api/speed');
     assert.ok(pausedSpeedCall, "Pause 상태에서도 /api/speed가 호출되어야 합니다.");
     assert.strictEqual(getGlobal('intervalMs'), 100, "Pause 상태에서도 intervalMs가 100으로 변경되어야 합니다.");
     console.log("✔ Test 21 통과: Pause 중 배속 변경 시 API 호출 및 새 배속 적용 확인");
@@ -1035,7 +1035,7 @@ async function runTests() {
 
     const origFetch = sandbox.fetch;
     sandbox.fetch = async (url, options) => {
-      if (url === '/api/speed') {
+      if (url === 'api/speed') {
         await delayedPromise;
         return {
           ok: true,
@@ -1068,7 +1068,7 @@ async function runTests() {
   {
     console.log("\n[Test 26] Stop 실패 상태 보존 검증");
     const stopSimulationFunc = getGlobal('stopSimulation');
-    const stopEvtSource = new MockEventSource("/api/stream");
+    const stopEvtSource = new MockEventSource("api/stream");
     sandbox.testStopEvtSource = stopEvtSource;
     vm.runInContext('evtSource = testStopEvtSource', context);
 
@@ -1164,7 +1164,7 @@ async function runTests() {
     await changeSpeedFunc("200");
 
     assert.strictEqual(fetchCalls.length, 1, "동기화 후 changeSpeed 호출 시 /api/speed가 호출되어야 합니다.");
-    assert.strictEqual(fetchCalls[0].url, "/api/speed");
+    assert.strictEqual(fetchCalls[0].url, "api/speed");
     const sentBody = JSON.parse(fetchCalls[0].options.body);
     assert.strictEqual(sentBody.interval, 0.2, "새 interval(0.2s)이 전달되어야 합니다.");
     assert.strictEqual(getGlobal('intervalMs'), 200, "intervalMs가 200ms로 갱신되어야 합니다.");
@@ -1315,8 +1315,8 @@ async function runTests() {
     };
 
     await startSensorFaultDemo();
-    const startCall = fetchCalls.find(c => c.url === '/api/start');
-    assert.ok(startCall, "/api/start가 호출되어야 합니다.");
+    const startCall = fetchCalls.find(c => c.url === 'api/start');
+    assert.ok(startCall, "api/start가 호출되어야 합니다.");
     const startReqFault = JSON.parse(startCall.options.body);
     assert.strictEqual(startReqFault.households[0].scenario, 'sensor_fault', "start payload scenario는 sensor_fault여야 합니다.");
 
@@ -1468,7 +1468,7 @@ async function runTests() {
         json: async () => ({ status: "started" })
       };
       await startMultiSimulation();
-      const startCall = fetchCalls.find(c => c.url === '/api/start');
+      const startCall = fetchCalls.find(c => c.url === 'api/start');
       assert.ok(startCall, `peak 실행에서는 faultDurationInput이 '${badVal}'이어도 /api/start가 호출되어야 합니다.`);
       const reqBody = JSON.parse(startCall.options.body);
       assert.strictEqual(reqBody.fault_duration_sec, undefined, "peak 실행 시 payload에 fault_duration_sec가 포함되면 안 됩니다.");
@@ -1481,7 +1481,7 @@ async function runTests() {
       faultInput.value = badVal;
       fetchCalls.length = 0;
       await startMultiSimulation();
-      const startCall = fetchCalls.find(c => c.url === '/api/start');
+      const startCall = fetchCalls.find(c => c.url === 'api/start');
       assert.strictEqual(startCall, undefined, `sensor_fault 실행에서는 faultDurationInput이 '${badVal}'일 때 /api/start가 호출되지 않고 차단되어야 합니다.`);
     }
 
@@ -1494,7 +1494,7 @@ async function runTests() {
       json: async () => ({ status: "started" })
     };
     await startMultiSimulation();
-    const sfCall = fetchCalls.find(c => c.url === '/api/start');
+    const sfCall = fetchCalls.find(c => c.url === 'api/start');
     assert.ok(sfCall, "올바른 30초 설정 시 /api/start가 호출되어야 합니다.");
     const sfReq = JSON.parse(sfCall.options.body);
     assert.strictEqual(sfReq.fault_duration_sec, 30, "payload에 fault_duration_sec: 30이 포함되어야 합니다.");
@@ -1604,8 +1604,8 @@ async function runTests() {
 
     await e2eStartRun();
 
-    const startPost = fetchCalls.find(c => c.url === '/api/e2e/runs');
-    assert.ok(startPost, "/api/e2e/runs POST 호출이 발생해야 합니다.");
+    const startPost = fetchCalls.find(c => c.url === 'api/e2e/runs');
+    assert.ok(startPost, "api/e2e/runs POST 호출이 발생해야 합니다.");
     assert.strictEqual(startPost.options.method, 'POST');
     const burstBody = JSON.parse(startPost.options.body);
     assert.strictEqual(burstBody.reference_date, '2026-09-16', "reference_date가 정확해야 합니다.");
@@ -1626,7 +1626,7 @@ async function runTests() {
       e2eSpeedInput.value = badSpeed;
       fetchCalls.length = 0;
       await e2eStartRun();
-      const blockedCall = fetchCalls.find(c => c.url === '/api/e2e/runs');
+      const blockedCall = fetchCalls.find(c => c.url === 'api/e2e/runs');
       assert.strictEqual(blockedCall, undefined, `잘못된 배속 '${badSpeed}'는 클라이언트에서 차단되어야 합니다.`);
       const msgArea = getOrCreateElement('e2eMessageArea');
       assert.strictEqual(msgArea.style.display, 'block', "경고 메시지가 노출되어야 합니다.");
@@ -1641,7 +1641,7 @@ async function runTests() {
       json: async () => ({ status: "accepted", state: "STARTING", run_id: "run_test_accel_001" })
     };
     await e2eStartRun();
-    const accelCall = fetchCalls.find(c => c.url === '/api/e2e/runs');
+    const accelCall = fetchCalls.find(c => c.url === 'api/e2e/runs');
     assert.ok(accelCall, "정상 배속 시 /api/e2e/runs가 호출되어야 합니다.");
     const accelBody = JSON.parse(accelCall.options.body);
     assert.strictEqual(accelBody.execution.mode, 'ACCELERATED');
@@ -1782,22 +1782,22 @@ async function runTests() {
     // 1. H001 pause
     fetchCalls.length = 0;
     await e2eHouseholdAction('H001', 'pause');
-    assert.ok(fetchCalls.some(c => c.url === '/api/e2e/runs/run_target_abc/households/H001/pause' && c.options.method === 'POST'), "pause 엔드포인트 호출 확인");
+    assert.ok(fetchCalls.some(c => c.url === 'api/e2e/runs/run_target_abc/households/H001/pause' && c.options.method === 'POST'), "pause 엔드포인트 호출 확인");
 
     // 2. H001 resume
     fetchCalls.length = 0;
     await e2eHouseholdAction('H001', 'resume');
-    assert.ok(fetchCalls.some(c => c.url === '/api/e2e/runs/run_target_abc/households/H001/resume' && c.options.method === 'POST'), "resume 엔드포인트 호출 확인");
+    assert.ok(fetchCalls.some(c => c.url === 'api/e2e/runs/run_target_abc/households/H001/resume' && c.options.method === 'POST'), "resume 엔드포인트 호출 확인");
 
     // 3. H001 stop
     fetchCalls.length = 0;
     await e2eHouseholdAction('H001', 'stop');
-    assert.ok(fetchCalls.some(c => c.url === '/api/e2e/runs/run_target_abc/households/H001/stop' && c.options.method === 'POST'), "가구 stop 엔드포인트 호출 확인");
+    assert.ok(fetchCalls.some(c => c.url === 'api/e2e/runs/run_target_abc/households/H001/stop' && c.options.method === 'POST'), "가구 stop 엔드포인트 호출 확인");
 
     // 4. 세션 일괄 stop
     fetchCalls.length = 0;
     await e2eStopRun();
-    assert.ok(fetchCalls.some(c => c.url === '/api/e2e/runs/run_target_abc/stop' && c.options.method === 'POST'), "세션 stop 엔드포인트 호출 확인");
+    assert.ok(fetchCalls.some(c => c.url === 'api/e2e/runs/run_target_abc/stop' && c.options.method === 'POST'), "세션 stop 엔드포인트 호출 확인");
 
     clearGlobalTimer();
     console.log("✔ Test 37 통과: 가구별 제어 및 세션 일괄 중단 API 계약 검증 완료");
@@ -1848,7 +1848,7 @@ async function runTests() {
       json: async () => ({ status: "error", code: "RUN_NOT_FOUND", message: "실행 ID를 찾을 수 없습니다." })
     };
     await e2eAttachRun();
-    assert.ok(fetchCalls.some(c => c.url === '/api/e2e/runs/run_missing_404'), "404 run_id 조회 호출 확인");
+    assert.ok(fetchCalls.some(c => c.url === 'api/e2e/runs/run_missing_404'), "404 run_id 조회 호출 확인");
     assert.notStrictEqual(getOrCreateElement('e2eMessageArea').textContent, '', "실패 메시지가 노출되어야 합니다.");
     assert.strictEqual(getGlobal('e2eCurrentRunId'), null, "실패 시 대상 run_id가 설정되지 않아야 합니다.");
     assert.strictEqual(getGlobal('e2ePollTimer'), null, "실패 시 폴링이 시작되지 않아야 합니다.");
@@ -1880,7 +1880,7 @@ async function runTests() {
       })
     };
     await e2eAttachRun();
-    assert.ok(fetchCalls.some(c => c.url === '/api/e2e/runs/run_existing_777'), "run_id 조회 호출 확인");
+    assert.ok(fetchCalls.some(c => c.url === 'api/e2e/runs/run_existing_777'), "run_id 조회 호출 확인");
     assert.strictEqual(getGlobal('e2eCurrentRunId'), 'run_existing_777', "연결된 run_id가 세팅되어야 합니다.");
     assert.strictEqual(getOrCreateElement('e2eRunIdDisplay').textContent, 'run_existing_777', "화면에 run_id가 표시되어야 합니다.");
     assert.strictEqual(getOrCreateElement('e2eStatus_H001').textContent, 'RUNNING', "가구 상태가 렌더링되어야 합니다.");
