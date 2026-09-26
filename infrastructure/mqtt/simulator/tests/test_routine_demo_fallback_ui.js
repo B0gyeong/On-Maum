@@ -16,6 +16,7 @@ function element(id) {
       dataset: {}, textContent: '', disabled: false, value: id === 'liveSpeedSelect' ? '10' : '0',
       listeners: {}, className: '',
       addEventListener(name, handler) { this.listeners[name] = handler; },
+      setAttribute(name, value) { this[name] = value; },
       getBoundingClientRect() { return { width: 600, height: 180 }; },
       getContext() { return canvasContext; }
     });
@@ -52,6 +53,7 @@ async function fetchMock(url, options) {
 }
 
 const context = {
+  Date: class extends Date { static now() { return Date.parse('2026-09-26T03:34:56Z'); } },
   fetch: fetchMock,
   EventSource: EventSourceMock,
   document: { readyState: 'complete', getElementById: element },
@@ -65,15 +67,15 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(code, context);
-assert.strictEqual(element('viewRangeLabel').textContent, '08:08:30~08:10:30');
+assert.strictEqual(element('viewRangeLabel').textContent, '12:34:56~12:36:56');
 element('viewWindowSelect').value = '329';
 element('viewWindowSelect').listeners.change();
-assert.strictEqual(element('viewRangeLabel').textContent, '08:08:30~08:13:59');
+assert.strictEqual(element('viewRangeLabel').textContent, '12:34:56~12:40:25');
 element('viewWindowSelect').value = '120';
 element('viewWindowSelect').listeners.change();
 element('demoScrubber').value = '200';
 element('demoScrubber').listeners.input();
-assert.strictEqual(element('viewRangeLabel').textContent, '08:10:05~08:12:05');
+assert.strictEqual(element('viewRangeLabel').textContent, '12:36:31~12:38:31');
 
 (async () => {
   await Promise.resolve(); // 초기 실행 상태 조회
@@ -81,14 +83,14 @@ assert.strictEqual(element('viewRangeLabel').textContent, '08:10:05~08:12:05');
 
   const starts = calls.filter(call => call.url === 'api/start');
   assert.deepStrictEqual(starts.map(call => call.body.scenario), ['routine_missed_demo', 'manual']);
-  assert.strictEqual(starts[1].body.start_time, '08:08:30');
+  assert.strictEqual(starts[1].body.start_time, undefined);
   assert.strictEqual(starts[1].body.interval, 0.1);
   assert.strictEqual(element('liveCard').dataset.state, 'running');
 
   stream.onmessage({ data: JSON.stringify({
     house: 'H001', scenario: 'manual', sec: 330, status: 'running',
     totalP: 56, measurementAvailable: true,
-    simTimeKst: '08:13:59', simDateKst: '2026-09-26',
+    simTimeKst: '12:40:30', simDateKst: '2026-09-26',
     devices: { microwave: { enabled: false } }
   }) });
   for (let index = 0; index < 5 && element('liveCard').dataset.state !== 'completed'; index += 1) {
@@ -98,5 +100,8 @@ assert.strictEqual(element('viewRangeLabel').textContent, '08:10:05~08:12:05');
   assert.strictEqual(calls.filter(call => call.url === 'api/stop').length, 1);
   assert.strictEqual(element('liveCard').dataset.state, 'completed');
   assert.strictEqual(element('liveProgress').textContent, '발행 330 / 330');
+  assert.strictEqual(element('rangeStartLabel').textContent, '12:35:01');
+  assert.strictEqual(element('rangeEndLabel').textContent, '12:40:30');
+  assert.strictEqual(element('viewRangeLabel').textContent, '12:38:30~12:40:30');
   console.log('routine demo fallback UI tests passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

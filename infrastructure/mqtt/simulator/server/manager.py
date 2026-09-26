@@ -178,10 +178,10 @@ class SimulatorManager:
                     routine_default_time="08:10:01"
                 )
             elif not is_multi and normalized_households[0]["scenario"] == "routine_missed_demo":
+                # 날짜 미지정 시 첫 계측 tick의 현재 시각을 사용한다.
+                # 날짜를 명시한 API 호출은 그 날짜의 현재 KST 시각을 따른다.
                 base_dt = scenarios.resolve_simulation_start_time(
-                    "routine_missed",
-                    simulation_date=simulation_date,
-                    routine_default_time=scenarios.RoutineMissedDemoScenario.DEFAULT_START_TIME
+                    "manual", simulation_date=simulation_date
                 )
             elif not is_multi and normalized_households[0]["scenario"] == "normal_routine":
                 base_dt = scenarios.resolve_simulation_start_time(
@@ -607,9 +607,9 @@ class SimulatorManager:
                                     event_desc = "H001 루틴 누락 전력 패턴 발행 완료 (300초 데이터 전송 완료)"
                             elif scenario == "routine_missed_demo":
                                 if h_cycle == 1:
-                                    event_desc = "08:08:30 평소 사용 시간대 비교 시작 (전자레인지 미가동 / 대기전력 유지)"
+                                    event_desc = "평소 사용 시간대 비교 시작 (전자레인지 미가동 / 대기전력 유지)"
                                 elif h_cycle == 92:
-                                    event_desc = "08:10:01 평소 사용 마감 시각 경과 (전자레인지 미사용)"
+                                    event_desc = "평소 사용 마감 시각 경과 (전자레인지 미사용)"
                                 elif h_cycle == scenarios.RoutineMissedDemoScenario.TOTAL_CYCLES:
                                     event_desc = "H001 루틴 누락 비교 전력 패턴 발행 완료"
                             elif scenario == "normal_routine":
