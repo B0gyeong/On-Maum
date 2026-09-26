@@ -1,12 +1,16 @@
 (function () {
   'use strict';
 
-  // 위 카드: 평소 아침 전자레인지 사용을 보여 주는 발표용 결정적 재생. 발행하지 않는다.
+  // 위 카드: 실행 시각에 맞춘 평소 전자레인지 사용 파형. 발행하지 않는다.
   const TOTAL_SECONDS = 329;
   const USE_START = 30;
   const USE_END = 90;
   const LIMIT_AT = 90;
-  const START_SECONDS = 8 * 3600 + 8 * 60 + 30;
+  function currentKstSeconds() {
+    const now = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    return now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds();
+  }
+  let startSeconds = currentKstSeconds();
 
   // 아래 카드: 평소 기록과 같은 시간에 미사용 전력을 발행하는 H001 routine_missed_demo 실행
   const LIVE_HOUSE = 'H001';
@@ -15,8 +19,7 @@
   const LIVE_APPLIANCE = 'microwave';
   const LIVE_TOTAL = TOTAL_SECONDS + 1;
   const USUAL_USE_SEC = 60;
-  // 웹 Manager는 평소 기록과 같은 08:08:30부터 발행하고 1번째 표본이 sec=1이다.
-  const LIVE_DEFAULT_START = START_SECONDS - 1;
+  // 웹 Manager의 첫 번째 표본은 sec=1이며, 첫 표본 시각으로 두 그래프의 시작점을 맞춘다.
   const POWER_MAX = 1200;
   const LIVE_VIEW_FROM = 1;
   const LIVE_VIEW_TO = LIVE_TOTAL;
@@ -38,7 +41,7 @@
     return 56 + Math.sin(index / 9 + salt) * 2.4 + Math.sin(index / 23) * 1.5 + seededNoise(index, salt) * 1.6;
   }
 
-  // 평소 08:09~08:10 전자레인지 사용(약 940W)을 결정적으로 재현한다.
+  // 평소에는 시작 30초 뒤부터 전자레인지를 60초간 사용한다.
   function createSeries() {
     const normal = [];
     for (let second = 0; second <= TOTAL_SECONDS; second += 1) {
@@ -58,14 +61,44 @@
   }
 
   function formatClock(absolute) {
-    const hours = Math.floor(absolute / 3600) % 24;
-    const minutes = Math.floor((absolute % 3600) / 60);
-    const seconds = absolute % 60;
+    const time = ((absolute % 86400) + 86400) % 86400;
+    const hours = Math.floor(time / 3600);
+    const minutes = Math.floor((time % 3600) / 60);
+    const seconds = time % 60;
     return [hours, minutes, seconds].map(value => String(value).padStart(2, '0')).join(':');
   }
 
   function formatTime(offset) {
-    return formatClock(START_SECONDS + offset);
+    return formatClock(startSeconds + offset);
+  }
+
+  function setStartSeconds(seconds) {
+    startSeconds = ((seconds % 86400) + 86400) % 86400;
+  }
+
+  function refreshTimeCopy() {
+    const start = formatTime(0);
+    const use = formatTime(USE_START);
+    const until = formatTime(USE_END);
+    const end = formatTime(TOTAL_SECONDS);
+    const copy = {
+      normalDescription: `${start}~${end} 기록에서 평소에는 ${use}에 전자레인지를 켜고 약 1분 뒤 끕니다.`,
+      liveDescription: `같은 ${start}~${end} 구간에 H001의 측정값 ${LIVE_TOTAL}개를 발행합니다.`,
+      normalUseLegend: `평소 사용 구간 (${use}~${until})`,
+      normalDeadlineLegend: `${until} 사용 마감 시각`,
+      liveUseLegend: `평소 사용 구간 (${use}~${until})`,
+      rangeStartLabel: start,
+      rangeEndLabel: end
+    };
+    for (const [id, value] of Object.entries(copy)) {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    }
+    const normalChart = document.getElementById('normalChart');
+    if (normalChart) normalChart.setAttribute('aria-label', `평소 ${use}부터 전자레인지를 약 1분 사용하고 끄는 정상 전력 파형`);
+    const anomalyChart = document.getElementById('anomalyChart');
+    if (anomalyChart) anomalyChart.setAttribute('aria-label', `평소 ${use}부터 ${until}까지의 사용 구간을 음영으로 표시하고, 금일에는 대기전력만 유지되는 실시간 발행 전력 파형`);
+    updateSharedView(viewFocus, true);
   }
 
   function parseClock(text) {
@@ -78,21 +111,21 @@
     if (position < USE_START) {
       return {
         index: '01 / 03', eyebrow: '대기전력 관찰',
-        title: '아침 준비 전에는 대기전력만 흐릅니다.',
+        title: '평소 사용 전에는 대기전력만 흐릅니다.',
         body: '공유기·셋톱박스 등의 대기전력에 냉장고 전력이 더해져 기저부하가 유지됩니다.'
       };
     }
     if (position < USE_END) {
       return {
         index: '02 / 03', eyebrow: '평소 사용',
-        title: '평소에는 08:09에 전자레인지로 약 1분 데웁니다.',
+        title: `평소에는 ${formatTime(USE_START)}에 전자레인지로 약 1분 데웁니다.`,
         body: '전자레인지는 켜는 순간 돌입 전류로 잠깐 튄 뒤 약 940W를 끊김 없이 유지합니다. 끄면 바로 대기전력으로 돌아옵니다.'
       };
     }
     return {
       index: '03 / 03', eyebrow: '오늘과 비교',
       title: '오늘은 사용해야 할 시간에 전자레인지를 켜지 않았습니다.',
-      body: '아래 실시간 그래프에는 같은 08:08:30~08:13:59 구간에 대기전력만 이어집니다. 루틴 누락 판정은 AI 분석 서비스가 수행합니다.'
+      body: `아래 실시간 그래프에는 같은 ${formatTime(0)}~${formatTime(TOTAL_SECONDS)} 구간에 대기전력만 이어집니다. AI 판정은 저장된 루틴 기준 시각을 따릅니다.`
     };
   }
 
@@ -132,8 +165,8 @@
   }
 
   function liveTimeLabel(state, sec) {
-    const base = state.baseSeconds === null ? LIVE_DEFAULT_START : state.baseSeconds;
-    return formatClock(((base + sec) % 86400 + 86400) % 86400);
+    const base = state.baseSeconds === null ? startSeconds - 1 : state.baseSeconds;
+    return formatClock(base + sec);
   }
 
   function liveViewEnd(state) {
@@ -383,7 +416,7 @@
 
     function finish() {
       closeStream();
-      setPhase('completed', `${state.simDate || ''} ${liveTimeLabel(state, 1)}부터 대기전력 ${LIVE_TOTAL}건을 MQTT로 발행했습니다. 전자레인지는 사용되지 않았습니다. Kafka 적재와 AI 판정 결과는 브리지·분석 서비스에서 확인합니다.`.trim());
+      setPhase('completed', `${liveTimeLabel(state, 1)}부터 대기전력 ${LIVE_TOTAL}건을 MQTT로 발행했습니다. 전자레인지는 사용되지 않았습니다. Kafka 적재와 AI 판정 결과는 브리지·분석 서비스에서 확인합니다.`);
     }
 
     async function finishFallback() {
@@ -396,7 +429,7 @@
         const status = await requestJson('GET', 'api/status');
         const house = status.active_households && status.active_households[LIVE_HOUSE];
         const published = house && Number.isInteger(house.cycle_count) ? house.cycle_count : state.lastSec;
-        setPhase('completed', `08:08:30~08:13:59 비교 구간을 표시했습니다. MQTT 발행 ${published}건 · 전자레인지 미사용. Kafka 적재와 AI 판정 결과는 브리지·분석 서비스에서 확인합니다.`);
+        setPhase('completed', `${formatTime(0)}~${formatTime(TOTAL_SECONDS)} 비교 구간을 표시했습니다. MQTT 발행 ${published}건 · 전자레인지 미사용. Kafka 적재와 AI 판정 결과는 브리지·분석 서비스에서 확인합니다.`);
       } catch (err) {
         setPhase('error', `비교 구간 발행 종료에 실패했습니다: ${err.message}`);
       }
@@ -416,7 +449,10 @@
         if (phase !== 'running') return;
         if (house && house.scenario === state.scenario && house.status === 'completed') {
           const last = status.last_metrics_by_house && status.last_metrics_by_house[LIVE_HOUSE];
-          if (last) applyLiveSample(state, last);
+          if (last && applyLiveSample(state, last) && state.baseSeconds !== null) {
+            setStartSeconds(state.baseSeconds + 1);
+            refreshTimeCopy();
+          }
           updateSharedView(state.lastSec - 1);
           finish();
         } else {
@@ -452,7 +488,12 @@
         let sample;
         try { sample = JSON.parse(event.data); } catch (err) { return; }
         if (phase !== 'running' && phase !== 'starting') return;
+        const hadBase = state.baseSeconds !== null;
         if (!applyLiveSample(state, sample)) return;
+        if (!hadBase && state.baseSeconds !== null) {
+          setStartSeconds(state.baseSeconds + 1);
+          refreshTimeCopy();
+        }
         updateSharedView(state.lastSec - 1);
         if (state.status === 'completed' || state.lastSec >= LIVE_TOTAL) {
           if (state.scenario === FALLBACK_SCENARIO) void finishFallback();
@@ -474,6 +515,8 @@
         }
         state = createLiveState();
         stoppingForCompletion = false;
+        setStartSeconds(currentKstSeconds());
+        refreshTimeCopy();
         updateSharedView(0, true);
         render();
         openStream();
@@ -481,12 +524,12 @@
         const interval = Math.round(1000 / speed) / 1000;
         try {
           await requestJson('POST', 'api/start', { house: LIVE_HOUSE, scenario: LIVE_SCENARIO, interval });
-          setPhase('running', '발행 시작 · 가상 시작 시각 08:08:30 KST');
+          setPhase('running', `발행 시작 · 첫 측정값의 현재 시각에 맞춰 두 그래프를 표시합니다.`);
         } catch (err) {
           if (!isUnsupportedDemoScenario(err)) throw err;
           state.scenario = FALLBACK_SCENARIO;
-          await requestJson('POST', 'api/start', { house: LIVE_HOUSE, scenario: FALLBACK_SCENARIO, start_time: '08:08:30', interval });
-          setPhase('running', '기존 서버 호환 방식으로 08:08:30부터 대기전력을 발행 중입니다.');
+          await requestJson('POST', 'api/start', { house: LIVE_HOUSE, scenario: FALLBACK_SCENARIO, interval });
+          setPhase('running', '기존 서버 호환 방식으로 현재 시각부터 대기전력을 발행 중입니다.');
         }
       } catch (err) {
         closeStream();
@@ -506,20 +549,21 @@
       render();
     }
 
-    // 새 시나리오 또는 같은 시작 시각의 기존 서버 호환 실행에 다시 연결한다.
+    // 시연 전용 시나리오가 진행 중이면 첫 표본 시각에 맞춰 다시 연결한다.
     async function attachIfRunning() {
       try {
         const status = await requestJson('GET', 'api/status');
         const house = status.active_households && status.active_households[LIVE_HOUSE];
         if (!house || house.status !== 'running') return;
-        const startClock = status.resolved_start_time ? new Date(status.resolved_start_time).toLocaleTimeString('en-GB', { timeZone: 'Asia/Seoul', hour12: false }) : '';
-        if (house.scenario !== LIVE_SCENARIO && !(house.scenario === FALLBACK_SCENARIO && startClock === '08:08:30')) return;
+        if (house.scenario !== LIVE_SCENARIO) return;
         state = createLiveState(house.scenario);
         const last = status.last_metrics_by_house && status.last_metrics_by_house[LIVE_HOUSE];
-        if (last) applyLiveSample(state, last);
+        if (last && applyLiveSample(state, last) && state.baseSeconds !== null) {
+          setStartSeconds(state.baseSeconds + 1);
+          refreshTimeCopy();
+        }
         updateSharedView(state.lastSec - 1);
         setPhase('running', '진행 중인 실행에 연결했습니다. 연결 이전 구간은 비어 있습니다.');
-        if (state.scenario === FALLBACK_SCENARIO && house.cycle_count >= LIVE_TOTAL) { await finishFallback(); return; }
         openStream();
         render();
       } catch (err) { /* 상태 조회 실패 시 실행 전 상태로 둔다 */ }
@@ -638,11 +682,11 @@
       viewSeconds = Number(viewSelect.value) || DEFAULT_VIEW_SECONDS;
       updateSharedView(viewFocus, true);
     });
-    updateSharedView(0, true);
+    refreshTimeCopy();
   }
 
   window.RoutineDemo = {
-    createSeries, formatTime, storyFor,
+    createSeries, formatTime, storyFor, setStartSeconds, currentKstSeconds,
     createLiveState, applyLiveSample, liveTimeLabel, liveViewEnd, liveTicks, liveStatusText, liveUsageSeconds, formatDuration, isUnsupportedDemoScenario, viewRange, visibleTicks,
     constants: { TOTAL_SECONDS, USE_START, USE_END, LIMIT_AT, LIVE_TOTAL, LIVE_VIEW_FROM, LIVE_VIEW_TO, USUAL_USE_SEC, LIVE_HOUSE, LIVE_SCENARIO, FALLBACK_SCENARIO, LIVE_APPLIANCE, DEFAULT_VIEW_SECONDS }
   };
