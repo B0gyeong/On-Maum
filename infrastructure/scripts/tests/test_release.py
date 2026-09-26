@@ -129,11 +129,12 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn(self.data["images"][service]["reference"], str(run.call_args_list))
         self.assertNotIn(self.data["images"]["api-gateway"]["reference"], str(run.call_args_list))
 
-    def test_a_pulls_exactly_four_application_images(self):
+    def test_a_pulls_application_images_and_simulator(self):
         with patch.object(release, "docker_json", side_effect=self.docker_metadata), \
                 patch.object(release.subprocess, "run") as run:
             release.check_images(self.data, "a", pull=True)
-        self.assertEqual(run.call_count, 4)
+        self.assertEqual(run.call_count, 5)
+        self.assertIn(self.data["images"]["simulator"]["reference"], str(run.call_args_list))
         for service in ("realtime-analysis-service", "aggregation-service", "mqtt-kafka-bridge",
                         "bronze-loader", "session-lake-loader", "power-silver", "gold-profile"):
             self.assertNotIn(self.data["images"][service]["reference"], str(run.call_args_list))

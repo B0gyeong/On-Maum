@@ -6,7 +6,7 @@ MQTT 브로커 관련 설정은 simulator.py의 환경변수 기반 설정을 �
 """
 
 DEFAULT_PORT = 8085
-ALLOWED_SCENARIOS = {"peak", "routine_missed", "random", "manual", "normal_routine", "prolonged_use", "sensor_fault"}
+ALLOWED_SCENARIOS = {"peak", "routine_missed", "routine_missed_demo", "random", "manual", "normal_routine", "prolonged_use", "sensor_fault"}
 MIN_INTERVAL = 0.1
 MAX_INTERVAL = 10.0
 DEFAULT_INTERVAL = 1.0

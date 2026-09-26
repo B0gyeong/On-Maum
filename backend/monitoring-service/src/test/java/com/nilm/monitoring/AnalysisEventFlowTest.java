@@ -119,6 +119,10 @@ class AnalysisEventFlowTest {
                 .isEqualTo(1);
         assertThat(jdbc.queryForObject("select auth_sub from notifications", String.class))
                 .isEqualTo("test-subject-3");
+        assertThat(jdbc.queryForObject("select response_status from notifications", String.class))
+                .isEqualTo("PENDING");
+        assertThat(applicationEvents.stream(NotificationReady.class).findFirst().orElseThrow().body())
+                .endsWith(NotificationReady.RESPONSE_QUESTION);
         assertThat(jdbc.queryForObject("select current_risk_level from subjects", String.class))
                 .isEqualTo("DANGER");
         assertThat(jdbc.queryForObject("select event_risk_appliance from subjects", String.class))

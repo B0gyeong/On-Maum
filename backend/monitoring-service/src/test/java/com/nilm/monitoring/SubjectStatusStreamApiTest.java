@@ -83,9 +83,9 @@ class SubjectStatusStreamApiTest {
                 .isEqualTo(eventId.toString());
         assertThat(payload.get("latestAlert").get("managerStatus").asText())
                 .isEqualTo("UNCONFIRMED");
-        // 장시간 사용은 응답을 요구하지 않는 유형이다.
+        // 장시간 사용도 대상자에게 위험 여부를 묻는다. 아직 답하지 않았다.
         assertThat(payload.get("latestAlert").get("subjectResponse").get("status").asText())
-                .isEqualTo("NOT_REQUIRED");
+                .isEqualTo("PENDING");
         assertThat(payload.get("latestAlert").get("subjectResponse").get("answer").isNull())
                 .isTrue();
         assertThat(payload.get("lastDetection").get("eventId").asText())

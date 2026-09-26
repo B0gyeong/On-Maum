@@ -122,7 +122,7 @@
       if (stLabel) stLabel.textContent = "처리 중...";
 
       try {
-        const res = await fetch('/api/device', {
+        const res = await fetch('api/device', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

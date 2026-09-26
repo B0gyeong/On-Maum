@@ -11,6 +11,7 @@ docker build --target test -f batch/aggregation_service/Dockerfile .
 docker build --target runtime -f batch/aggregation_service/Dockerfile \
   -t "$IMAGE_REPOSITORY:aggregation-service-$RELEASE_ID" .
 docker build -t "$IMAGE_REPOSITORY:mqtt-kafka-bridge-$RELEASE_ID" infrastructure/mqtt-kafka-bridge
+docker build -t "$IMAGE_REPOSITORY:simulator-$RELEASE_ID" infrastructure/mqtt/simulator
 docker build -t "$IMAGE_REPOSITORY:bronze-loader-$RELEASE_ID" collection/bronze-loader
 docker build --target test --build-context analysis=ai/realtime-analysis-service \
   collection/session-lake-loader

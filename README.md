@@ -67,6 +67,23 @@ python infrastructure/mqtt/simulator/web_server.py
 python infrastructure/mqtt/simulator/simulator.py --scenario normal_routine
 ```
 
+2-3. EC2-A에서 Docker로 실행
+master 배포 때 `simulator` 이미지가 함께 pull되지만, 자동으로 뜨지는 않습니다. 최초 1회 아래를 준비합니다.
+- Jenkins `ec2-a-runtime-env`에 `SIMULATOR_MQTT_HOST`(EC2-A 사설 IP), `SIMULATOR_MQTT_PASS`를 추가합니다.
+- 운영 MQTT CA(`CN=nilm-mqtt-ca`)를 `/opt/nilm/mqtt/certs/ca.crt`에 둡니다. 다른 경로를 쓰면 `SIMULATOR_MQTT_CA_FILE`로 지정합니다.
+- 접속 비밀번호 파일을 만듭니다(비밀번호는 프롬프트로 입력).
+```bash
+printf 'demo:%s\n' "$(openssl passwd -apr1)" > /opt/nilm/nginx/auth/simulator.htpasswd && chmod 644 /opt/nilm/nginx/auth/simulator.htpasswd
+```
+기동·종료:
+```bash
+cd /opt/nilm && docker compose --profile simulator up -d simulator
+```
+```bash
+cd /opt/nilm && docker compose --profile simulator stop simulator
+```
+접속: `https://<APP_DOMAIN>/simulator/routine-demo` (아이디 `demo`). 컨테이너가 꺼져 있으면 502가 납니다.
+
 ### 운영 Prometheus / Grafana 확인
 1. SSH 터널 접속 (창은 닫지 말 것)
 ```bash

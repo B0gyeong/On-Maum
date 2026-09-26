@@ -163,12 +163,13 @@ public class AnalysisEventService {
             return;
         }
 
+        boolean responseRequired = routing.responseRequired(message.eventType());
         Notification notification = notifications.createNotification(
                 message.eventId(),
                 null,
                 subject.getId(),
                 subject.getAuthSub(),
-                routing.responseRequired(message.eventType()),
+                responseRequired,
                 routing.responseDeadline()
         );
         subject.markAlerted(now);
@@ -184,10 +185,12 @@ public class AnalysisEventService {
                             + "eventType={}, level={}",
                     notification.getId(), subject.getId(), message.eventId(),
                     message.eventType(), level);
+            // 응답 화면의 "예"는 위험(도움 요청)이다. 질문도 그 방향으로 묻는다.
+            String body = narrator.describeDetail(stored);
             publisher.publishEvent(new NotificationReady(
                     notification.getId(),
                     "안전 확인 요청",
-                    narrator.describeDetail(stored)
+                    responseRequired ? body + ". " + NotificationReady.RESPONSE_QUESTION : body
             ));
         } else {
             // 알림 행은 남았는데 폰에 아무것도 안 오는 상황의 이유를 그대로 남긴다.

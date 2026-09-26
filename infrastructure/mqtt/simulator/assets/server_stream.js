@@ -9,7 +9,7 @@
         evtSource.close();
         evtSource = null;
       }
-      evtSource = new EventSource('/api/stream');
+      evtSource = new EventSource('api/stream');
       evtSource.onmessage = (e) => {
         try {
           if (e.data && e.data.startsWith('{')) {
@@ -44,7 +44,7 @@
     async function checkServerConnection() {
       const btnManual = document.getElementById('btnManualDemo');
       try {
-        const res = await fetch('/api/status', { method: 'GET' });
+        const res = await fetch('api/status', { method: 'GET' });
         if (res.ok) {
           const data = await res.json();
           isServerConnected = true;

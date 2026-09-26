@@ -146,12 +146,16 @@ class SimulatorManager:
                 normalized_households = sorted(households, key=lambda x: x["house"])
                 is_multi = (len(normalized_households) > 1)
 
-            # 1-A. normal_routine·prolonged_use는 H001 가구에서만 실행 가능
+            # 1-A. 시연용 단일 가구 시나리오의 대상 검증
             for h_item in normalized_households:
                 if h_item.get("scenario") == "normal_routine" and h_item.get("house") != "H001":
                     raise ValueError("normal_routine 시나리오는 H001 가구에서만 실행할 수 있습니다.")
                 if h_item.get("scenario") == "prolonged_use" and h_item.get("house") != "H001":
                     raise ValueError("prolonged_use 시나리오는 H001 가구에서만 실행할 수 있습니다.")
+                if h_item.get("scenario") == "routine_missed_demo" and h_item.get("house") != "H001":
+                    raise ValueError("routine_missed_demo 시나리오는 H001 가구에서만 실행할 수 있습니다.")
+            if is_multi and any(h["scenario"] == "routine_missed_demo" for h in normalized_households):
+                raise ValueError("routine_missed_demo 시나리오는 단일 가구에서만 실행할 수 있습니다.")
 
             # 2. TLS 설정 사전 동기 검증 (CA 누락/미존재/권한 오류 시 런타임 start 호출에서 즉각 예외 발생)
             from engine.tls import get_mqtt_tls_context
@@ -160,7 +164,7 @@ class SimulatorManager:
 
             # 3. 공통 가상 시작 시각 결정
             has_normal = any(h["scenario"] == "normal_routine" for h in normalized_households)
-            has_missed = any(h["scenario"] == "routine_missed" for h in normalized_households)
+            has_missed = any(h["scenario"] in ("routine_missed", "routine_missed_demo") for h in normalized_households)
             if has_normal and has_missed:
                 raise ValueError("normal_routine과 routine_missed는 동일한 다중 실행에서 함께 사용할 수 없습니다.")
             has_prolonged = any(h["scenario"] == "prolonged_use" for h in normalized_households)
@@ -172,6 +176,12 @@ class SimulatorManager:
                     "routine_missed",
                     simulation_date=simulation_date,
                     routine_default_time="08:10:01"
+                )
+            elif not is_multi and normalized_households[0]["scenario"] == "routine_missed_demo":
+                base_dt = scenarios.resolve_simulation_start_time(
+                    "routine_missed",
+                    simulation_date=simulation_date,
+                    routine_default_time=scenarios.RoutineMissedDemoScenario.DEFAULT_START_TIME
                 )
             elif not is_multi and normalized_households[0]["scenario"] == "normal_routine":
                 base_dt = scenarios.resolve_simulation_start_time(
@@ -595,6 +605,13 @@ class SimulatorManager:
                                     event_desc = "299개 분석 입력 데이터 충족 — AI 이상 감지 판정 대기"
                                 elif h_cycle == 300:
                                     event_desc = "H001 루틴 누락 전력 패턴 발행 완료 (300초 데이터 전송 완료)"
+                            elif scenario == "routine_missed_demo":
+                                if h_cycle == 1:
+                                    event_desc = "08:08:30 평소 사용 시간대 비교 시작 (전자레인지 미가동 / 대기전력 유지)"
+                                elif h_cycle == 92:
+                                    event_desc = "08:10:01 평소 사용 마감 시각 경과 (전자레인지 미사용)"
+                                elif h_cycle == scenarios.RoutineMissedDemoScenario.TOTAL_CYCLES:
+                                    event_desc = "H001 루틴 누락 비교 전력 패턴 발행 완료"
                             elif scenario == "normal_routine":
                                 event_desc = simulator.inject_normal_routine_scenario_event(h_cycle, house)
                                 if not event_desc:
@@ -679,6 +696,8 @@ class SimulatorManager:
                             if scenario == "peak" and h_cycle >= 60:
                                 is_completed = True
                             elif scenario == "routine_missed" and h_cycle >= 300:
+                                is_completed = True
+                            elif scenario == "routine_missed_demo" and h_cycle >= scenarios.RoutineMissedDemoScenario.TOTAL_CYCLES:
                                 is_completed = True
                             elif scenario == "normal_routine" and h_cycle >= scenarios.NormalRoutineScenario.TOTAL_CYCLES:
                                 is_completed = True
@@ -781,7 +800,7 @@ class SimulatorManager:
                                 status_tag = "가전 가동 중"
                             notice_str = f" <== [{event_desc}]" if event_desc else ""
                             print(f"[WebSimulator] (T+{h_cycle:02d}s | {sim_datetime_kst}) {house} 전력: {metrics['active_power']:7.1f} W | {status_tag} [{h_status}]{notice_str}", flush=True)
-                        elif scenario == "routine_missed":
+                        elif scenario in ("routine_missed", "routine_missed_demo"):
                             status_tag, notice = scenarios.RoutineMissedScenario.get_cycle_status(h_cycle)
                             notice_str = f" <== [{event_desc}]" if event_desc else notice
                             print(f"[WebSimulator] (T+{h_cycle:03d}s | {sim_datetime_kst}) {house} 전력: {metrics['active_power']:5.1f} W | {status_tag} [{h_status}]{notice_str}", flush=True)
