@@ -1,29 +1,31 @@
 (function () {
   'use strict';
 
-  // 위 카드: 평소 점심 전자레인지 사용(12:00부터 약 90초)을 보여 주는 발표용 결정적 재생. 발행하지 않는다.
-  const TOTAL_SECONDS = 180;
+  // 위 카드: 평소 아침 전자레인지 사용을 보여 주는 발표용 결정적 재생. 발행하지 않는다.
+  const TOTAL_SECONDS = 329;
   const USE_START = 30;
-  const USE_END = 120;
-  const LIMIT_AT = 150;
-  const START_SECONDS = 11 * 3600 + 59 * 60 + 30;
+  const USE_END = 90;
+  const LIMIT_AT = 90;
+  const START_SECONDS = 8 * 3600 + 8 * 60 + 30;
 
-  // 아래 카드: 시뮬레이터가 실제로 발행하는 H001 prolonged_use 실행 (scenarios.ProlongedUseScenario)
+  // 아래 카드: 평소 기록과 같은 시간에 미사용 전력을 발행하는 H001 routine_missed_demo 실행
   const LIVE_HOUSE = 'H001';
-  const LIVE_SCENARIO = 'prolonged_use';
+  const LIVE_SCENARIO = 'routine_missed_demo';
+  const FALLBACK_SCENARIO = 'manual';
   const LIVE_APPLIANCE = 'microwave';
-  const LIVE_TOTAL = 630;
-  const LIVE_ON = 301;
-  const LIVE_OFF = 601;
-  const USUAL_USE_SEC = 90;
-  const ALLOWED_USE_SEC = 120;
-  // 서버 기본 시작 시각은 11:55:00이고 1번째 표본이 sec=1이므로, sec=0 기준은 11:54:59이다.
-  const LIVE_DEFAULT_START = 11 * 3600 + 54 * 60 + 59;
+  const LIVE_TOTAL = TOTAL_SECONDS + 1;
+  const USUAL_USE_SEC = 60;
+  // 웹 Manager는 평소 기록과 같은 08:08:30부터 발행하고 1번째 표본이 sec=1이다.
+  const LIVE_DEFAULT_START = START_SECONDS - 1;
   const POWER_MAX = 1200;
-  // 아래 그래프는 위 기록 재생과 같은 11:59:30~12:02:30 구간(sec 271~451)으로 시작하고,
-  // 발행이 12:02:30을 넘으면 같은 폭 안에서 오른쪽 끝을 늘려 12:05:29(sec 630)까지 보여 준다.
-  const LIVE_VIEW_FROM = LIVE_ON - USE_START;
-  const LIVE_VIEW_TO = LIVE_VIEW_FROM + TOTAL_SECONDS;
+  const LIVE_VIEW_FROM = 1;
+  const LIVE_VIEW_TO = LIVE_TOTAL;
+  const DEFAULT_VIEW_SECONDS = 120;
+  let viewSeconds = DEFAULT_VIEW_SECONDS;
+  let viewFrom = 0;
+  let viewFocus = 0;
+  let replayRedraw = null;
+  let liveRedraw = null;
 
   const COLORS = { normal: '#d95e12', anomaly: '#b91c1c', grid: 'rgba(214, 211, 209, .55)', tick: '#78716c', band: 'rgba(243, 121, 41, .10)', marker: '#b91c1c' };
 
@@ -36,7 +38,7 @@
     return 56 + Math.sin(index / 9 + salt) * 2.4 + Math.sin(index / 23) * 1.5 + seededNoise(index, salt) * 1.6;
   }
 
-  // 전자레인지 연속 블록(약 940W, 켤 때 2초 돌입 전류, engine/profiles.py 중앙값)을 결정적으로 재현한다.
+  // 평소 08:09~08:10 전자레인지 사용(약 940W)을 결정적으로 재현한다.
   function createSeries() {
     const normal = [];
     for (let second = 0; second <= TOTAL_SECONDS; second += 1) {
@@ -76,31 +78,31 @@
     if (position < USE_START) {
       return {
         index: '01 / 03', eyebrow: '대기전력 관찰',
-        title: '점심 준비 전에는 대기전력만 흐릅니다.',
-        body: '공유기·셋톱박스·냉장고 등에서 발생하는 약 50–65W의 기저부하가 유지됩니다.'
+        title: '아침 준비 전에는 대기전력만 흐릅니다.',
+        body: '공유기·셋톱박스 등의 대기전력에 냉장고 전력이 더해져 기저부하가 유지됩니다.'
       };
     }
     if (position < USE_END) {
       return {
         index: '02 / 03', eyebrow: '평소 사용',
-        title: '평소에는 12:00에 전자레인지로 약 90초 데웁니다.',
+        title: '평소에는 08:09에 전자레인지로 약 1분 데웁니다.',
         body: '전자레인지는 켜는 순간 돌입 전류로 잠깐 튄 뒤 약 940W를 끊김 없이 유지합니다. 끄면 바로 대기전력으로 돌아옵니다.'
       };
     }
     return {
       index: '03 / 03', eyebrow: '오늘과 비교',
-      title: '평소에는 1분 30초 만에 끄지만, 오늘은 계속 켜져 있습니다.',
-      body: '아래 실시간 그래프에서 전자레인지가 켜진 뒤 허용 사용시간 2분을 넘겨 5분간 이어집니다. 사용시간 초과 판정은 AI 분석 서비스가 수행합니다.'
+      title: '오늘은 사용해야 할 시간에 전자레인지를 켜지 않았습니다.',
+      body: '아래 실시간 그래프에는 같은 08:08:30~08:13:59 구간에 대기전력만 이어집니다. 루틴 누락 판정은 AI 분석 서비스가 수행합니다.'
     };
   }
 
   // ---- 실시간 발행 상태 (DOM과 분리된 순수 함수: 테스트 대상) ----
-  function createLiveState() {
-    return { power: new Array(LIVE_TOTAL + 1).fill(null), lastSec: 0, received: 0, baseSeconds: null, simTime: null, simDate: null, status: 'idle', onSec: null, offSec: null, applianceOn: false };
+  function createLiveState(scenario = LIVE_SCENARIO) {
+    return { scenario, power: new Array(LIVE_TOTAL + 1).fill(null), lastSec: 0, received: 0, baseSeconds: null, simTime: null, simDate: null, status: 'idle', onSec: null, offSec: null, applianceOn: false };
   }
 
   function applyLiveSample(state, sample) {
-    if (!sample || sample.house !== LIVE_HOUSE || sample.scenario !== LIVE_SCENARIO) return false;
+    if (!sample || sample.house !== LIVE_HOUSE || sample.scenario !== state.scenario) return false;
     const sec = Number(sample.sec);
     if (!Number.isInteger(sec) || sec < 0 || sec > LIVE_TOTAL) return false;
     if (state.power[sec] === null) state.received += 1;
@@ -135,26 +137,44 @@
   }
 
   function liveViewEnd(state) {
-    return Math.min(LIVE_TOTAL, Math.max(LIVE_VIEW_TO, state.lastSec));
+    return LIVE_VIEW_TO;
   }
 
-  // 눈금 후보. 앞쪽일수록 우선하며, 좁아서 겹치는 눈금은 그리기에서 뺀다.
-  // 축이 늘어나 12:00:00이 왼쪽 끝(11:59:30)과 가까워지면 12:00:00을 남긴다.
+  function viewRange(focus, seconds = DEFAULT_VIEW_SECONDS) {
+    const width = Math.max(1, Math.min(TOTAL_SECONDS, seconds));
+    const from = Math.max(0, Math.min(TOTAL_SECONDS - width, Math.round(focus) - width + 15));
+    return { from, to: from + width };
+  }
+
+  function visibleTicks(from, to) {
+    const ticks = [from, to];
+    for (let second = Math.ceil(from / 30) * 30; second <= to; second += 30) ticks.push(second);
+    return [...new Set(ticks)];
+  }
+
+  function updateSharedView(focus, force = false) {
+    viewFocus = Math.max(0, Math.min(TOTAL_SECONDS, focus));
+    const next = viewRange(viewFocus, viewSeconds);
+    if (!force && next.from === viewFrom) return;
+    viewFrom = next.from;
+    const label = document.getElementById('viewRangeLabel');
+    if (label) label.textContent = `${formatTime(viewFrom)}~${formatTime(next.to)}`;
+    if (replayRedraw) replayRedraw();
+    if (liveRedraw) liveRedraw();
+  }
+
+  // 실시간 표본 번호는 평소 기록의 초 오프셋보다 1 크다.
   function liveTicks(end) {
-    const ticks = [LIVE_ON, LIVE_ON + ALLOWED_USE_SEC, end, LIVE_VIEW_FROM];
-    if (end === LIVE_VIEW_TO) ticks.push(LIVE_ON + USUAL_USE_SEC);
-    if (end >= LIVE_OFF) ticks.push(LIVE_OFF);
-    return ticks;
+    return visibleTicks(viewFrom, viewFrom + viewSeconds).map(second => second + 1);
   }
 
   function liveStatusText(state) {
-    const used = liveUsageSeconds(state);
-    if (state.lastSec >= LIVE_TOTAL || state.status === 'completed') return `MQTT 발행 ${LIVE_TOTAL}건 완료 · 전자레인지 ${formatDuration(used)} 연속 사용 기록`;
-    if (state.onSec === null) return `사용 전 대기전력 발행 중 (${state.lastSec}/${LIVE_ON - 1})`;
-    if (state.offSec !== null) return `전자레인지 ${formatDuration(used)} 연속 사용 후 꺼짐 · 대기전력 복귀`;
-    if (used < USUAL_USE_SEC) return `전자레인지 사용 중 · 연속 ${formatDuration(used)} (평소 ${formatDuration(USUAL_USE_SEC)})`;
-    if (used < ALLOWED_USE_SEC) return `평소 사용시간 ${formatDuration(USUAL_USE_SEC)} 초과 · 연속 ${formatDuration(used)}`;
-    return `허용 사용시간 ${formatDuration(ALLOWED_USE_SEC)} 초과 · 연속 ${formatDuration(used)} — AI 사용시간 초과 판정 대상`;
+    if (state.lastSec >= LIVE_TOTAL || state.status === 'completed') return `MQTT 발행 ${LIVE_TOTAL}건 완료 · 전자레인지 미사용`;
+    return `전자레인지 미사용 · 대기전력 발행 중 (${state.lastSec}/${LIVE_TOTAL})`;
+  }
+
+  function isUnsupportedDemoScenario(error) {
+    return error.message.includes('지원하지 않는 시나리오') && error.message.includes(LIVE_SCENARIO);
   }
 
   // ---- 그리기 ----
@@ -172,19 +192,19 @@
     return { context, width, height };
   }
 
-  function drawFrame(canvas, from, to, timeTicks, labelFor) {
+  function drawFrame(canvas, from, to, timeTicks, labelFor, maxPower = POWER_MAX) {
     const { context: ctx, width, height } = getCanvasMetrics(canvas);
     const pad = { left: 46, right: 16, top: 12, bottom: 24 };
     const plotWidth = width - pad.left - pad.right;
     const plotHeight = height - pad.top - pad.bottom;
     const xAt = index => pad.left + ((index - from) / (to - from)) * plotWidth;
-    const yAt = power => pad.top + (1 - Math.min(POWER_MAX, Math.max(0, power)) / POWER_MAX) * plotHeight;
+    const yAt = power => pad.top + (1 - Math.min(maxPower, Math.max(0, power)) / maxPower) * plotHeight;
 
     ctx.clearRect(0, 0, width, height);
     ctx.font = '10px Pretendard, -apple-system, sans-serif';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    [0, 400, 800, 1200].forEach(power => {
+    [0, maxPower / 3, maxPower * 2 / 3, maxPower].forEach(power => {
       const y = yAt(power);
       ctx.strokeStyle = COLORS.grid;
       ctx.lineWidth = 1;
@@ -193,7 +213,7 @@
       ctx.lineTo(width - pad.right, y);
       ctx.stroke();
       ctx.fillStyle = COLORS.tick;
-      ctx.fillText(power === POWER_MAX ? '1.2kW' : String(power), pad.left - 8, y);
+      ctx.fillText(maxPower === POWER_MAX && power === POWER_MAX ? '1.2kW' : String(Math.round(power)), pad.left - 8, y);
     });
 
     // 눈금은 주어진 순서(우선순위)대로 그리고, 이미 그린 눈금과 겹치면 뺀다. 양 끝 눈금은 안쪽으로 정렬한다.
@@ -256,12 +276,16 @@
 
   function drawBand(frame, from, to) {
     const { ctx, pad, plotHeight, xAt } = frame;
+    from = Math.max(from, frame.from);
+    to = Math.min(to, frame.to);
+    if (to <= from) return;
     ctx.fillStyle = COLORS.band;
     ctx.fillRect(xAt(from), pad.top, xAt(to) - xAt(from), plotHeight);
   }
 
   function drawMarker(frame, at) {
     const { ctx, pad, plotHeight, xAt } = frame;
+    if (at < frame.from || at > frame.to) return;
     ctx.save();
     ctx.strokeStyle = COLORS.marker;
     ctx.globalAlpha = .7;
@@ -275,22 +299,24 @@
   }
 
   function drawReplay(canvas, data, position) {
-    const frame = drawFrame(canvas, 0, TOTAL_SECONDS, [USE_START, LIMIT_AT, TOTAL_SECONDS, 0, USE_END], formatTime);
+    const to = viewFrom + viewSeconds;
+    const frame = drawFrame(canvas, viewFrom, to, visibleTicks(viewFrom, to), formatTime);
     const { xAt, yAt } = frame;
     drawBand(frame, USE_START, USE_END);
     drawMarker(frame, LIMIT_AT);
-    plotLine(frame, data, COLORS.normal, position);
-    drawCursor(frame, xAt(position), yAt(data[position]), COLORS.normal);
+    plotLine(frame, data, COLORS.normal, TOTAL_SECONDS);
+    if (position >= viewFrom && position <= to) drawCursor(frame, xAt(position), yAt(data[position]), COLORS.normal);
   }
 
   function drawLive(canvas, state) {
-    const end = liveViewEnd(state);
-    const frame = drawFrame(canvas, LIVE_VIEW_FROM, end, liveTicks(end), sec => liveTimeLabel(state, sec));
+    const from = viewFrom + 1;
+    const end = viewFrom + viewSeconds + 1;
+    const frame = drawFrame(canvas, from, end, liveTicks(end), sec => liveTimeLabel(state, sec));
     const { xAt, yAt } = frame;
-    drawBand(frame, LIVE_ON, LIVE_ON + USUAL_USE_SEC);
-    drawMarker(frame, LIVE_ON + ALLOWED_USE_SEC);
+    drawBand(frame, USE_START + 1, USE_END + 1);
+    drawMarker(frame, 299);
     plotLine(frame, state.power, COLORS.anomaly, state.lastSec);
-    if (state.lastSec >= LIVE_VIEW_FROM) {
+    if (state.lastSec >= from && state.lastSec <= end) {
       const value = state.power[state.lastSec];
       drawCursor(frame, xAt(state.lastSec), value === null ? null : yAt(value), COLORS.anomaly);
     }
@@ -330,6 +356,7 @@
     let phase = 'idle'; // idle | starting | running | completed | stopped | error
     let stream = null;
     let watchdog = null;
+    let stoppingForCompletion = false;
 
     function setPhase(next, message) {
       phase = next;
@@ -350,13 +377,30 @@
       el.badge.textContent = badge[0];
       el.badge.className = 'status-badge ' + badge[1];
       if (message) el.message.textContent = message;
-      if (next === 'running' && !watchdog) watchdog = window.setInterval(checkServer, 3000);
-      if (next !== 'running' && next !== 'starting' && watchdog) { window.clearInterval(watchdog); watchdog = null; }
+      if (next === 'running' && !watchdog) watchdog = window.setInterval(checkServer, state.scenario === FALLBACK_SCENARIO ? 500 : 3000);
+      if (next !== 'running' && watchdog) { window.clearInterval(watchdog); watchdog = null; }
     }
 
     function finish() {
       closeStream();
-      setPhase('completed', `${state.simDate || ''} ${liveTimeLabel(state, 1)}부터 ${LIVE_TOTAL}건을 MQTT로 발행했습니다. 전자레인지는 ${formatDuration(liveUsageSeconds(state))} 연속 사용되었습니다. Kafka 적재와 AI 판정 결과는 브리지·분석 서비스에서 확인합니다.`.trim());
+      setPhase('completed', `${state.simDate || ''} ${liveTimeLabel(state, 1)}부터 대기전력 ${LIVE_TOTAL}건을 MQTT로 발행했습니다. 전자레인지는 사용되지 않았습니다. Kafka 적재와 AI 판정 결과는 브리지·분석 서비스에서 확인합니다.`.trim());
+    }
+
+    async function finishFallback() {
+      if (stoppingForCompletion) return;
+      stoppingForCompletion = true;
+      closeStream();
+      setPhase('starting', '비교 구간이 끝나 발행을 종료하는 중입니다.');
+      try {
+        await requestJson('POST', '/api/stop');
+        const status = await requestJson('GET', '/api/status');
+        const house = status.active_households && status.active_households[LIVE_HOUSE];
+        const published = house && Number.isInteger(house.cycle_count) ? house.cycle_count : state.lastSec;
+        setPhase('completed', `08:08:30~08:13:59 비교 구간을 표시했습니다. MQTT 발행 ${published}건 · 전자레인지 미사용. Kafka 적재와 AI 판정 결과는 브리지·분석 서비스에서 확인합니다.`);
+      } catch (err) {
+        setPhase('error', `비교 구간 발행 종료에 실패했습니다: ${err.message}`);
+      }
+      render();
     }
 
     // SSE 큐가 가득 차면 서버가 표본을 버리고, 다른 화면에서 중지하면 알림이 오지 않으므로 상태를 주기적으로 대조한다.
@@ -365,11 +409,15 @@
       try {
         const status = await requestJson('GET', '/api/status');
         const house = status.active_households && status.active_households[LIVE_HOUSE];
-        if (house && house.scenario === LIVE_SCENARIO && house.status === 'running') return;
+        if (house && house.scenario === state.scenario && house.status === 'running') {
+          if (state.scenario === FALLBACK_SCENARIO && house.cycle_count >= LIVE_TOTAL) await finishFallback();
+          return;
+        }
         if (phase !== 'running') return;
-        if (house && house.scenario === LIVE_SCENARIO && house.status === 'completed') {
+        if (house && house.scenario === state.scenario && house.status === 'completed') {
           const last = status.last_metrics_by_house && status.last_metrics_by_house[LIVE_HOUSE];
           if (last) applyLiveSample(state, last);
+          updateSharedView(state.lastSec - 1);
           finish();
         } else {
           closeStream();
@@ -385,13 +433,13 @@
       const value = state.power[state.lastSec];
       el.power.textContent = state.lastSec > 0 && value !== null ? Math.round(value).toLocaleString('ko-KR') : '—';
       el.progress.textContent = `발행 ${state.lastSec} / ${LIVE_TOTAL}`;
-      el.usage.textContent = state.onSec === null ? '—' : formatDuration(liveUsageSeconds(state));
+      el.usage.textContent = state.onSec === null ? '미사용' : formatDuration(liveUsageSeconds(state));
       if (phase === 'running') {
-        const over = state.onSec !== null && liveUsageSeconds(state) >= ALLOWED_USE_SEC;
-        el.badge.textContent = over ? '사용시간 초과' : state.applianceOn ? '전자레인지 사용 중' : '발행 중';
-        el.badge.className = 'status-badge ' + (over ? 'status-alert' : 'status-active');
+        el.badge.textContent = '전자레인지 미사용';
+        el.badge.className = 'status-badge status-active';
       }
     }
+    liveRedraw = render;
 
     function closeStream() {
       if (stream) { stream.close(); stream = null; }
@@ -405,8 +453,10 @@
         try { sample = JSON.parse(event.data); } catch (err) { return; }
         if (phase !== 'running' && phase !== 'starting') return;
         if (!applyLiveSample(state, sample)) return;
+        updateSharedView(state.lastSec - 1);
         if (state.status === 'completed' || state.lastSec >= LIVE_TOTAL) {
-          finish();
+          if (state.scenario === FALLBACK_SCENARIO) void finishFallback();
+          else finish();
         } else if (phase === 'running') {
           el.message.textContent = liveStatusText(state);
         }
@@ -419,16 +469,25 @@
       try {
         const status = await requestJson('GET', '/api/status');
         if (status.is_running) {
-          const ok = window.confirm(`시뮬레이터에서 '${status.current_mode || '다른'}' 실행이 진행 중입니다.\n중지하고 H001 전자레인지 사용시간 초과(prolonged_use) 실시간 발행을 시작할까요?`);
+          const ok = window.confirm(`시뮬레이터에서 '${status.current_mode || '다른'}' 실행이 진행 중입니다.\n중지하고 H001 아침 미사용 전력 발행을 시작할까요?`);
           if (!ok) { setPhase('idle', '실행을 취소했습니다. 진행 중인 시뮬레이션은 그대로 유지됩니다.'); return; }
         }
         state = createLiveState();
+        stoppingForCompletion = false;
+        updateSharedView(0, true);
         render();
         openStream();
         const speed = Number(el.speed.value) || 1;
-        const started = await requestJson('POST', '/api/start', { house: LIVE_HOUSE, scenario: LIVE_SCENARIO, interval: Math.round(1000 / speed) / 1000 });
-        const resolved = /(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/.exec(started.resolved_start_time || '');
-        setPhase('running', `발행 시작 · 가상 시작 시각 ${resolved ? resolved[1] + ' ' + resolved[2] : '11:55:00'} KST`);
+        const interval = Math.round(1000 / speed) / 1000;
+        try {
+          await requestJson('POST', '/api/start', { house: LIVE_HOUSE, scenario: LIVE_SCENARIO, interval });
+          setPhase('running', '발행 시작 · 가상 시작 시각 08:08:30 KST');
+        } catch (err) {
+          if (!isUnsupportedDemoScenario(err)) throw err;
+          state.scenario = FALLBACK_SCENARIO;
+          await requestJson('POST', '/api/start', { house: LIVE_HOUSE, scenario: FALLBACK_SCENARIO, start_time: '08:08:30', interval });
+          setPhase('running', '기존 서버 호환 방식으로 08:08:30부터 대기전력을 발행 중입니다.');
+        }
       } catch (err) {
         closeStream();
         setPhase('error', `실행하지 못했습니다: ${err.message}`);
@@ -447,15 +506,20 @@
       render();
     }
 
-    // 이미 진행 중인 prolonged_use 실행이 있으면 이어서 표시한다 (새로고침·다른 탭에서 시작한 경우).
+    // 새 시나리오 또는 같은 시작 시각의 기존 서버 호환 실행에 다시 연결한다.
     async function attachIfRunning() {
       try {
         const status = await requestJson('GET', '/api/status');
         const house = status.active_households && status.active_households[LIVE_HOUSE];
-        if (!house || house.scenario !== LIVE_SCENARIO || house.status !== 'running') return;
+        if (!house || house.status !== 'running') return;
+        const startClock = status.resolved_start_time ? new Date(status.resolved_start_time).toLocaleTimeString('en-GB', { timeZone: 'Asia/Seoul', hour12: false }) : '';
+        if (house.scenario !== LIVE_SCENARIO && !(house.scenario === FALLBACK_SCENARIO && startClock === '08:08:30')) return;
+        state = createLiveState(house.scenario);
         const last = status.last_metrics_by_house && status.last_metrics_by_house[LIVE_HOUSE];
         if (last) applyLiveSample(state, last);
+        updateSharedView(state.lastSec - 1);
         setPhase('running', '진행 중인 실행에 연결했습니다. 연결 이전 구간은 비어 있습니다.');
+        if (state.scenario === FALLBACK_SCENARIO && house.cycle_count >= LIVE_TOTAL) { await finishFallback(); return; }
         openStream();
         render();
       } catch (err) { /* 상태 조회 실패 시 실행 전 상태로 둔다 */ }
@@ -464,7 +528,12 @@
     el.start.addEventListener('click', start);
     el.stop.addEventListener('click', stop);
     // SSE는 브라우저 연결 풀을 점유하므로 페이지를 떠날 때 닫는다. 다른 탭으로 전환하는 동안에는 유지한다.
-    window.addEventListener('pagehide', closeStream);
+    window.addEventListener('pagehide', function () {
+      closeStream();
+      if (state.scenario === FALLBACK_SCENARIO && (phase === 'running' || phase === 'starting') && navigator.sendBeacon) {
+        navigator.sendBeacon('/api/stop', new Blob(['{}'], { type: 'application/json' }));
+      }
+    });
     window.addEventListener('pageshow', function (event) {
       if (event.persisted && phase === 'running') openStream();
     });
@@ -511,6 +580,7 @@
       elements.storyTitle.textContent = story.title;
       elements.storyBody.textContent = story.body;
     }
+    replayRedraw = render;
 
     function setPlaying(next) {
       playing = next;
@@ -530,6 +600,7 @@
       if (advance > 0) {
         accumulator -= advance;
         position = Math.min(TOTAL_SECONDS, position + advance);
+        updateSharedView(position);
         render();
       }
       if (position >= TOTAL_SECONDS) setPlaying(false);
@@ -539,16 +610,19 @@
     elements.play.addEventListener('click', function () {
       if (!playing && position >= TOTAL_SECONDS) position = 0;
       setPlaying(!playing);
+      updateSharedView(position);
       render();
     });
     elements.reset.addEventListener('click', function () {
       setPlaying(false);
       position = 0;
+      updateSharedView(position);
       render();
     });
     elements.scrubber.addEventListener('input', function () {
       setPlaying(false);
       position = Number(elements.scrubber.value);
+      updateSharedView(position);
       render();
     });
     window.addEventListener('resize', render);
@@ -559,12 +633,18 @@
     if (!document.getElementById('normalChart') || !document.getElementById('anomalyChart')) return;
     initReplay();
     initLive();
+    const viewSelect = document.getElementById('viewWindowSelect');
+    viewSelect.addEventListener('change', function () {
+      viewSeconds = Number(viewSelect.value) || DEFAULT_VIEW_SECONDS;
+      updateSharedView(viewFocus, true);
+    });
+    updateSharedView(0, true);
   }
 
   window.RoutineDemo = {
     createSeries, formatTime, storyFor,
-    createLiveState, applyLiveSample, liveTimeLabel, liveViewEnd, liveTicks, liveStatusText, liveUsageSeconds, formatDuration,
-    constants: { TOTAL_SECONDS, USE_START, USE_END, LIMIT_AT, LIVE_TOTAL, LIVE_ON, LIVE_OFF, LIVE_VIEW_FROM, LIVE_VIEW_TO, USUAL_USE_SEC, ALLOWED_USE_SEC, LIVE_HOUSE, LIVE_SCENARIO, LIVE_APPLIANCE }
+    createLiveState, applyLiveSample, liveTimeLabel, liveViewEnd, liveTicks, liveStatusText, liveUsageSeconds, formatDuration, isUnsupportedDemoScenario, viewRange, visibleTicks,
+    constants: { TOTAL_SECONDS, USE_START, USE_END, LIMIT_AT, LIVE_TOTAL, LIVE_VIEW_FROM, LIVE_VIEW_TO, USUAL_USE_SEC, LIVE_HOUSE, LIVE_SCENARIO, FALLBACK_SCENARIO, LIVE_APPLIANCE, DEFAULT_VIEW_SECONDS }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

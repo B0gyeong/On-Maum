@@ -103,6 +103,14 @@ class RoutineMissedScenario:
             return "이상 감지 상태 유지", ""
 
 
+class RoutineMissedDemoScenario:
+    """평소 사용 기록과 같은 08:08:30~08:13:59 구간을 대기전력으로 발행한다."""
+    TARGET_HOUSE = "H001"
+    DEFAULT_START_TIME = "08:08:30"
+    TOTAL_CYCLES = 330
+    DEFAULT_COUNT = TOTAL_CYCLES
+
+
 # ==========================================
 # 2-A. 정상 일상(NORMAL_ROUTINE) 시나리오
 # ==========================================
@@ -702,6 +710,8 @@ def get_scenario_target_cycles(scenario: str, fault_duration_sec: int = 120) -> 
         return 60
     elif scenario == "routine_missed":
         return 300
+    elif scenario == "routine_missed_demo":
+        return RoutineMissedDemoScenario.TOTAL_CYCLES
     elif scenario == "normal_routine":
         return NormalRoutineScenario.TOTAL_CYCLES
     elif scenario == "prolonged_use":
