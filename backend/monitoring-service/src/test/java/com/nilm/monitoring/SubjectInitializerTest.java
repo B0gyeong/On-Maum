@@ -61,14 +61,27 @@ class SubjectInitializerTest {
     }
 
     @Test
-    void createsTenHouseholdsAndLinksSubjectsToUserSubsAndManagers() {
+    void createsThirtyHouseholdsPerManagerAndLinksSubjectsToUserSubs() {
         new SubjectInitializer(jdbc, api, managers, "Test1234!")
                 .afterSingletonsInstantiated();
 
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM subjects",
                 Integer.class
-        )).isEqualTo(10);
+        )).isEqualTo(300);
+        assertThat(jdbc.queryForList(
+                "SELECT manager_id, COUNT(*) AS cnt FROM subjects "
+                        + "GROUP BY manager_id ORDER BY manager_id"
+        )).hasSize(10)
+                .allSatisfy(row -> assertThat(row.get("cnt"))
+                        .asString().isEqualTo("30"));
+        assertThat(managerOf("H030")).isEqualTo(1L);
+        assertThat(managerOf("H031")).isEqualTo(2L);
+        assertThat(managerOf("H300")).isEqualTo(10L);
+        assertThat(jdbc.queryForObject(
+                "SELECT auth_sub FROM subjects WHERE household_id = 'H300'",
+                String.class
+        )).isEqualTo(userId("subject300@nilm.local").toString());
         var first = jdbc.queryForMap(
                 "SELECT * FROM subjects WHERE household_id = 'H001'"
         );
@@ -88,7 +101,7 @@ class SubjectInitializerTest {
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM subjects",
                 Integer.class
-        )).isEqualTo(10);
+        )).isEqualTo(300);
     }
 
     @Test
@@ -141,7 +154,15 @@ class SubjectInitializerTest {
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM subjects",
                 Integer.class
-        )).isEqualTo(10);
+        )).isEqualTo(300);
+    }
+
+    private Long managerOf(String houseId) {
+        return jdbc.queryForObject(
+                "SELECT manager_id FROM subjects WHERE household_id = ?",
+                Long.class,
+                houseId
+        );
     }
 
     private UUID userId(String email) {

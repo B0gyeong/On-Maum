@@ -39,11 +39,12 @@ VAPID 키 없이 서버를 시작할 수 있다. Kafka까지 끄려면
 `TEST_DATA_ENABLED=true`로 실행하면 Flyway 완료 후 Kafka 수신 전에
 IoT Device Service의 실제 회원가입·로그인·가구 등록 API를 호출한다.
 
-- `subject01@nilm.local` ~ `subject10@nilm.local`: `H001` ~ `H010`을 등록하고
+- `subject01@nilm.local` ~ `subject300@nilm.local`: `H001` ~ `H300`을 등록하고
   `subjects.auth_sub`에 Keycloak user ID를 연결한다.
 - `manager01@nilm.local` ~ `manager10@nilm.local`: 기관 담당자로 가입하고
   `managers.auth_sub`에 Keycloak user ID를 연결한다.
-- 각 대상자는 같은 번호의 담당자에게 1:1로 배정된다.
+- 담당자 1명당 대상자 30명이 가구 번호 순으로 배정된다. `H001`~`H030`은
+  `manager01`, `H031`~`H060`은 `manager02`, … `H271`~`H300`은 `manager10`이다.
 - 비밀번호는 `TEST_ACCOUNT_PASSWORD`, API 주소는 `IOT_DEVICE_SERVICE_URL`로
   주입한다. 테스트 데이터가 켜져 있는데 비밀번호가 비어 있으면 시작을 실패한다.
 
