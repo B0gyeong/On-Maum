@@ -104,9 +104,8 @@ class RoutineMissedScenario:
 
 
 class RoutineMissedDemoScenario:
-    """평소 사용 기록과 같은 08:08:30~08:13:59 구간을 대기전력으로 발행한다."""
+    """첫 계측 시점부터 평소 기록과 같은 330초 구간을 대기전력으로 발행한다."""
     TARGET_HOUSE = "H001"
-    DEFAULT_START_TIME = "08:08:30"
     TOTAL_CYCLES = 330
     DEFAULT_COUNT = TOTAL_CYCLES
 
