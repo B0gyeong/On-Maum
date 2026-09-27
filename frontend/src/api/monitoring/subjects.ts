@@ -12,10 +12,10 @@ export const registerSubject = (subject: SubjectRegistration) =>
     data: subject,
   });
 
-export const getSubjectEvents = (subjectId: string, cursor?: string) =>
+export const getSubjectEvents = (subjectId: string, cursor?: string, range?: { from: string; to: string }) =>
   request<Events>({
     url: `/monitoring/subjects/${subjectId}/events`,
-    params: { size: 20, cursor },
+    params: { size: 20, cursor, ...range },
   });
 
 export const getPowerUsage = (subjectId: string, date: string) =>

@@ -1,4 +1,5 @@
 export { monitoringKeys } from "./monitoringKeys";
+export { useMeQuery } from "./useAuthQueries";
 export {
   useMyDashboardQuery,
   usePowerUsageQuery,

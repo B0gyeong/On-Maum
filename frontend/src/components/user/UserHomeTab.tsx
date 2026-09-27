@@ -1,4 +1,6 @@
+import LocationServiceCard from "./LocationServiceCard";
 import type { MyDashboard } from "../../types/monitoring";
+import PushNotificationCard from "./PushNotificationCard";
 import UserDashboard from "./UserDashboard";
 import UserTabStatus from "./UserTabStatus";
 import type { UserTabStatusProps } from "./UserTabStatus";
@@ -9,7 +11,6 @@ type UserHomeTabProps = {
   busy: boolean;
   status: UserTabStatusProps;
   onUpdateAway: (enabled: boolean) => void;
-  onOpenAwaySettings: () => void;
 };
 
 export default function UserHomeTab({
@@ -18,7 +19,6 @@ export default function UserHomeTab({
   busy,
   status,
   onUpdateAway,
-  onOpenAwaySettings,
 }: UserHomeTabProps) {
   return (
     <>
@@ -40,7 +40,13 @@ export default function UserHomeTab({
         data={data}
         busy={busy}
         onUpdateAway={onUpdateAway}
-        onOpenAwaySettings={onOpenAwaySettings}
+      />
+      <LocationServiceCard />
+      <PushNotificationCard
+        status={status.pushStatus}
+        error={status.pushError}
+        onEnable={status.onEnablePush}
+        onRetry={status.onRetryPush}
       />
     </>
   );

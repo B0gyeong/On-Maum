@@ -41,7 +41,7 @@ const meta = {
         http.get("/api/monitoring/my-dashboard", () =>
           HttpResponse.json({
             subjectId: "storybook-user",
-            name: "김마음",
+            name: "박정수",
             awayMode: {
               enabled: false,
               scheduled: false,
