@@ -30,10 +30,10 @@ import org.springframework.transaction.annotation.Transactional;
  * 모니터링 자체 위험 평가의 반영 지점.
  *
  * <p>계산은 {@link RiskAssessor}가 하고, 여기서는 그 결과를 대상자 상태에 옮긴다.
- * 등급 전이에 히스테리시스를 걸고, 알림을 낼지 정하고, 평가 이력을 남긴다.
+ * 참고 점수를 반영하고, 이벤트 등급의 재발송을 정하고, 평가 이력을 남긴다.
  *
- * <p>설계 11장대로 최종 점수의 주체는 이 경로 하나다. 분석 서비스 이벤트가 세운 등급은
- * 별도 슬롯에 있고, 화면에 나가는 유효 등급은 둘 중 높은 값이다.
+ * <p>자체 평가는 등급을 내지 않는다. 화면에 나가는 등급은 분석 서비스 이벤트가 세운
+ * 슬롯에서 온다. 타이머는 그 슬롯의 최대 유지시간과 재발송 간격을 재는 역할만 한다.
  */
 @Service
 @Slf4j
@@ -192,7 +192,7 @@ public class RiskAssessmentService {
         RiskAssessment assessment = assessor.assess(
                 profiles.resolveActive(subject.getHouseholdId(), now), state, policy);
 
-        Subject.AssessmentOutcome outcome = subject.applyAssessment(assessment, policy, now);
+        Subject.AssessmentOutcome outcome = subject.applyAssessment(assessment, now);
 
         UUID assessmentId = UUID.randomUUID();
         Notification notification = alertIfNeeded(subject, assessmentId, outcome, state, now);
@@ -208,10 +208,11 @@ public class RiskAssessmentService {
     }
 
     /**
-     * 알림을 낼지 정한다.
+     * 알림을 다시 낼지 정한다.
      *
-     * <p>등급이 실제로 올라갔을 때, 또는 같은 주의·위험 등급이 이어지는 동안
-     * 재발송 간격이 지났을 때만 낸다. 같은 판단으로 같은 알림을 반복하지 않기 위해서다.
+     * <p>유효 등급은 이벤트 슬롯에서 오고, 첫 알림은 이벤트 경로가 이미 냈다. 여기서는
+     * 같은 주의·위험 등급이 이어지는 동안 재발송 간격이 지났을 때만 다시 낸다.
+     * 같은 판단으로 같은 알림을 반복하지 않기 위해서다.
      */
     private Notification alertIfNeeded(
             Subject subject,
@@ -225,7 +226,7 @@ public class RiskAssessmentService {
             return null;
         }
         if (state.away()) {
-            // 자체 평가는 모두 부재를 근거로 한다. 외출 중에는 알리지 않는다.
+            // 외출 중에는 다시 알리지 않는다. 첫 알림의 억제 규칙은 이벤트 경로가 따로 정한다.
             return null;
         }
 

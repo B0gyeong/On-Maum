@@ -47,6 +47,13 @@ export function useSubjectStream() {
             if (event.version <= (receivedVersions.get(event.subjectId) ?? -1)
               || (previous && event.version < previous.version)) return;
             receivedVersions.set(event.subjectId, event.version);
+            const resolvedAlert = event.latestAlert;
+            if (resolvedAlert?.managerStatus === "RESOLVED") {
+              setNotices((current) => current.filter((notice) => notice.event.latestAlert?.alertId !== resolvedAlert.alertId));
+              setHistory((current) => current.map((notice) => notice.event.latestAlert?.alertId === resolvedAlert.alertId
+                ? { ...notice, event: { ...notice.event, latestAlert: resolvedAlert } }
+                : notice));
+            }
             queryClient.setQueryData<SubjectsResponse>(monitoringKeys.subjects, (current) =>
               current
                 ? {
@@ -91,5 +98,12 @@ export function useSubjectStream() {
     setNotices((current) => current.filter((notice) => notice.id !== id));
   };
 
-  return { connection, error, notices, history, dismissNotice };
+  const resolveAlert = (alertId: string) => {
+    setNotices((current) => current.filter((notice) => notice.event.latestAlert?.alertId !== alertId));
+    setHistory((current) => current.map((notice) => notice.event.latestAlert?.alertId === alertId
+      ? { ...notice, event: { ...notice.event, latestAlert: { ...notice.event.latestAlert, managerStatus: "RESOLVED", managerStatusUpdatedAt: new Date().toISOString() } } }
+      : notice));
+  };
+
+  return { connection, error, notices, history, dismissNotice, resolveAlert };
 }

@@ -46,12 +46,13 @@ export default function RecentAlerts({ subjects, history = [], loading = false, 
             <div className="min-w-48 flex-1">
               <div className="flex flex-wrap items-center gap-3">
                 <strong>{subjects.find((subject) => subject.subjectId === alert.subjectId)?.name ?? "대상자"}님</strong>
-                <span className={alert.kind === "help" ? "rounded-md bg-red-600 px-2.5 py-1 text-base font-bold leading-5 text-white" : `font-semibold ${alert.kind === "risk" ? "text-orange-800" : alert.kind === "safe" ? "text-emerald-700" : "text-stone-700"}`}>
+                <span className={alert.resolved ? "font-semibold text-stone-500" : alert.kind === "help" ? "rounded-md bg-red-600 px-2.5 py-1 text-base font-bold leading-5 text-white" : `font-semibold ${alert.kind === "risk" ? "text-orange-800" : alert.kind === "safe" ? "text-emerald-700" : "text-stone-700"}`}>
                   {content[alert.kind].label}
+                  {alert.resolved && " · 해결 완료"}
                 </span>
                 <span className="font-semibold tabular-nums text-stone-700">{alert.score}점</span>
               </div>
-              <p className="mt-2 text-sm leading-6 text-stone-600">{content[alert.kind].description}</p>
+              <p className="mt-2 text-sm leading-6 text-stone-600">{alert.resolved ? "담당자가 조치를 완료한 알림입니다." : content[alert.kind].description}</p>
               <time className="mt-1 block text-sm text-stone-500" dateTime={alert.time}>
                 {alert.source === "dashboard" ? "서버 최신 정보 · " : "수신 시각 · "}{formatDateTime(alert.time)}
               </time>

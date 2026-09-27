@@ -5,6 +5,13 @@ export type SubjectsResponse = { subjects: Subject[] };
 
 export const getSubjects = () => request<SubjectsResponse>({ url: "/monitoring/dashboard" });
 
+export const resolveNotification = (notificationId: string) =>
+  request<void>({
+    url: `/monitoring/notifications/${notificationId}/manager-status`,
+    method: "PUT",
+    data: { status: "RESOLVED" },
+  });
+
 export const registerSubject = (subject: SubjectRegistration) =>
   request<void>({
     url: "/monitoring/subjects",

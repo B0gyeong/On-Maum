@@ -12,7 +12,6 @@ import com.nilm.monitoring.risk.RiskAssessor;
 import com.nilm.monitoring.service.ApplianceActivityService;
 import com.nilm.monitoring.service.CurrentStateProvider;
 import com.nilm.monitoring.service.ResolvedProfile;
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -93,18 +92,19 @@ class CurrentStateProviderTest {
         }
     }
 
-    /** 전기포트 기준선 하나뿐인 프로필. 첫 사용 P90은 07:00이다. */
+    /** 활동 감소 통계 하나뿐인 프로필. 평소 12:00까지 다섯 번 켰다. */
     private ResolvedProfile profile() {
+        ResolvedProfile.Statistic activity = new ResolvedProfile.Statistic(
+                "CUMULATIVE_ACTIVITY_START_COUNT", null, "ALL", "12:00",
+                20, 20, 5.0, 5.0, 0.0, "count", "READY");
         return new ResolvedProfile(
                 "profile-1",
                 LocalDate.of(2026, 5, 10),
                 NOW.minusHours(6),
                 false,
-                List.of(new ResolvedProfile.RoutineBaseline(
-                        "KETTLE", "OVERALL", null, 20, 18,
-                        BigDecimal.valueOf(1.0), BigDecimal.ONE,
-                        21600, 25200, null, null, "READY", true)),
-                Map.of());
+                List.of(),
+                Map.of(ResolvedProfile.statisticKey(
+                        activity.metricName(), null, "ALL", "12:00"), activity));
     }
 
     private IndicatorResult indicator(RiskAssessment assessment, String code) {
@@ -119,7 +119,7 @@ class CurrentStateProviderTest {
     }
 
     @Test
-    void 하루를_계속_본_가구는_루틴_미사용을_계산한다() {
+    void 하루를_계속_본_가구는_활동_감소를_계산한다() {
         observeContinuously(DAY_START, NOW);
 
         CurrentState state = currentStates.of("H100", false, NOW);
@@ -127,10 +127,13 @@ class CurrentStateProviderTest {
 
         assertThat(state.observation().coverageTracked()).isTrue();
         assertThat(state.activity().precise()).isTrue();
-        // 07:00까지는 쓰던 가전을 12:10까지 쓰지 않았다. 그 사실을 끝까지 봤다.
-        assertThat(indicator(assessment, "M").included()).isTrue();
-        assertThat(indicator(assessment, "M").score()).isEqualTo(1.0);
+        // 평소 다섯 번 켜는 12:00까지 한 번도 켜지 않았다. 그 사실을 끝까지 봤다.
+        // z = 5, clip((5-2)/4) = 0.75
+        assertThat(indicator(assessment, "A").included()).isTrue();
+        assertThat(indicator(assessment, "A").score()).isEqualTo(0.75);
         assertThat(assessment.status()).isEqualTo(AssessmentStatus.VALID);
+        // 참고 점수일 뿐 등급은 내지 않는다.
+        assertThat(assessment.level()).isNull();
     }
 
     @Test
@@ -144,21 +147,20 @@ class CurrentStateProviderTest {
 
         // 신선도는 회복됐다. 그 한 건이 공백을 증명하지는 않는다.
         assertThat(state.observation().lastObservedAt()).isEqualTo(NOW);
-        assertThat(indicator(assessment, "M").excludedReason()).isEqualTo("OBSERVATION_COVERAGE");
-        assertThat(assessment.level()).isNull();
+        assertThat(indicator(assessment, "A").excludedReason()).isEqualTo("OBSERVATION_COVERAGE");
+        assertThat(assessment.score()).isNull();
         assertThat(assessment.status()).isEqualTo(AssessmentStatus.PARTIAL);
     }
 
     @Test
-    void 관측이_끊긴_채로는_위험_등급을_내지_않는다() {
+    void 관측이_끊긴_채로는_점수를_내지_않는다() {
         // 하루를 계속 보다가 4시간 전에 끊겼다.
         observeContinuously(DAY_START, NOW.minusHours(4));
 
         RiskAssessment assessment = assess(currentStates.of("H100", false, NOW));
 
-        assertThat(indicator(assessment, "M").excludedReason()).isEqualTo("OBSERVATION_STALE");
+        assertThat(indicator(assessment, "A").excludedReason()).isEqualTo("OBSERVATION_STALE");
         assertThat(assessment.status()).isNotEqualTo(AssessmentStatus.VALID);
-        assertThat(assessment.level()).isNull();
         assertThat(assessment.score()).isNull();
     }
 
@@ -173,11 +175,11 @@ class CurrentStateProviderTest {
         CurrentState state = currentStates.of("H100", false, NOW);
 
         assertThat(state.activity().used("KETTLE", DAY_START, NOW)).isFalse();
-        assertThat(indicator(assess(state), "M").score()).isEqualTo(1.0);
+        assertThat(indicator(assess(state), "A").observed()).isZero();
     }
 
     @Test
-    void 유효한_사용이_있으면_루틴_미사용이_아니다() {
+    void 유효한_사용은_활동_시작으로_센다() {
         observeContinuously(DAY_START, DAY_START.plusHours(6));
         activities.handle(snapshot(DAY_START.plusHours(6).plusSeconds(10), "KETTLE"));
         activities.handle(snapshot(DAY_START.plusHours(6).plusSeconds(70), null));
@@ -188,7 +190,7 @@ class CurrentStateProviderTest {
         assertThat(state.activity().used("KETTLE", DAY_START, NOW)).isTrue();
         assertThat(state.activity().startCount(LocalDate.of(2026, 5, 11), NOW))
                 .hasValue(1);
-        assertThat(indicator(assess(state), "M").score()).isZero();
+        assertThat(indicator(assess(state), "A").observed()).isEqualTo(1.0);
     }
 
     @Test

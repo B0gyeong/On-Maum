@@ -86,7 +86,7 @@ export default function SubjectDetail({ subject, history = [], demo = false }: {
             <div className="flex justify-between py-3">
               <dt className="text-stone-500">최근 응답</dt>
               <dd className="font-semibold">
-                {responseLabel(subject.latestAlert?.subjectResponse)}
+                {subject.latestAlert?.managerStatus === "RESOLVED" ? "해결 완료" : responseLabel(subject.latestAlert?.subjectResponse)}
               </dd>
             </div>
             <div className="flex justify-between py-3">

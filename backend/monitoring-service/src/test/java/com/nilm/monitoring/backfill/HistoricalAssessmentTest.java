@@ -118,32 +118,40 @@ class HistoricalAssessmentTest {
         assertThat(directory.resolve("bad/manifest.json")).doesNotExist();
     }
 
-    @Test void realCalculatorProducesDangerFromMissedRoutineAndExcludesAway() throws Exception {
+    @Test void realCalculatorProducesReferenceScoreWithoutLevelAndExcludesAway() throws Exception {
         var json = HistoricalAssessmentCli.JSON;
-        Path config = config();
-        var properties = new RiskProperties();
-        properties.setMinGrace(Duration.ofSeconds(30));
-        json.writeValue(directory.resolve("policy.json").toFile(), properties);
-        var baseline = new HouseholdProfileMessage.RoutineBaseline("IRON", "OVERALL", null,
-                28, 28, java.math.BigDecimal.ONE, java.math.BigDecimal.ONE,
-                0, 10, 0, 10, "READY", true);
+        // 평소 00:30까지 다섯 번 켜는 가구가 한 번도 켜지 않았다. z = 5, 점수 75다.
+        var statistic = new HouseholdProfileMessage.Statistic("CUMULATIVE_ACTIVITY_START_COUNT", null,
+                "ALL", "00:30", 20L, 20L, 5.0, 5.0, 0.0, "count", "READY");
         var profile = new HouseholdProfileMessage(1, "H001", "ready", 1L, "ACTIVE",
                 START.toLocalDate().minusDays(1), START.toLocalDate().minusDays(28),
                 START.toLocalDate().minusDays(1), START, START, "s", "r", "s", "READY",
-                List.of(baseline), List.of());
+                List.of(), List.of(statistic));
         json.writeValue(directory.resolve("profiles.json").toFile(), List.of(profile));
-        Files.writeString(directory.resolve("snapshots.jsonl"), json.writeValueAsString(snapshot(0, false)) + "\n"
-                + json.writeValueAsString(snapshot(60, false)) + "\n");
-        HistoricalAssessmentCli.run(config, directory.resolve("danger"));
-        var danger = json.readTree(Files.readAllLines(directory.resolve("danger/assessments.jsonl")).get(1));
-        assertThat(danger.get("assessment_status").asText()).isEqualTo("VALID");
-        assertThat(danger.get("risk_score").asInt()).isEqualTo(100);
-        assertThat(danger.get("risk_level").asText()).isEqualTo("DANGER");
-        json.writeValue(config.toFile(), new HistoricalAssessmentCli.Config("H001", START, START.plusMinutes(2),
-                60, "snapshots.jsonl", "profiles.json", "policy.json",
+        json.writeValue(directory.resolve("policy.json").toFile(), new RiskProperties());
+        // 자정부터 1분마다 봤다. 00:30 구간을 빠짐없이 봐야 활동 부족을 확정할 수 있다.
+        var snapshots = new StringBuilder();
+        for (long second = 0; second <= 32 * 60; second += 60) {
+            snapshots.append(json.writeValueAsString(snapshot(second, false))).append('\n');
+        }
+        Files.writeString(directory.resolve("snapshots.jsonl"), snapshots.toString());
+        Path config = directory.resolve("config.json");
+        json.writeValue(config.toFile(), new HistoricalAssessmentCli.Config("H001", START.plusMinutes(30),
+                START.plusMinutes(32), 60, "snapshots.jsonl", "profiles.json", "policy.json", List.of()));
+
+        HistoricalAssessmentCli.run(config, directory.resolve("home"));
+        var home = json.readTree(Files.readAllLines(directory.resolve("home/assessments.jsonl")).getFirst());
+        assertThat(home.get("assessment_status").asText()).isEqualTo("VALID");
+        assertThat(home.get("risk_score").asInt()).isEqualTo(75);
+        // 자체 평가는 등급을 내지 않는다. 등급은 분석 서비스 이벤트가 정한다.
+        assertThat(home.get("risk_level").isNull()).isTrue();
+        assertThat(home.get("score_version").asText()).isEqualTo("monitoring-score-v2-A");
+
+        json.writeValue(config.toFile(), new HistoricalAssessmentCli.Config("H001", START.plusMinutes(30),
+                START.plusMinutes(32), 60, "snapshots.jsonl", "profiles.json", "policy.json",
                 List.of(new HistoricalAssessmentCli.AwayPeriod(START, START.plusHours(1)))));
         HistoricalAssessmentCli.run(config, directory.resolve("away"));
-        var away = json.readTree(Files.readAllLines(directory.resolve("away/assessments.jsonl")).get(1));
+        var away = json.readTree(Files.readAllLines(directory.resolve("away/assessments.jsonl")).getFirst());
         assertThat(away.get("risk_score").isNull()).isTrue();
     }
 }

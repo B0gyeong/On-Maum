@@ -36,8 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
  *       마지막 사용은 조회 구간 밖이어도 반드시 한 건 싣는다.</li>
  * </ul>
  *
- * <p>두 가지를 모두 실으므로 루틴 미사용(M)·무활동(I)·활동 감소(A)가 모두 계산된다.
- * 옛 입력 계약으로는 M과 A가 제외됐다.
+ * <p>두 가지를 모두 실어야 활동 감소(A)가 계산된다. 옛 입력 계약으로는 A가 제외됐다.
+ * v1 점수식의 루틴 미사용(M)·무활동(I)은 분석 서비스로 넘어갔다.
  */
 @Service
 @RequiredArgsConstructor

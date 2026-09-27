@@ -14,8 +14,9 @@ import org.springframework.stereotype.Component;
  * 분석 서비스 이벤트를 유형별로 어떻게 다룰지 정한 표(설계 11.4절).
  *
  * <p>모든 이벤트를 하나의 흐름으로 처리하면 판단 주체가 섞인다.
- * 장시간 사용처럼 분석 서비스가 소유하는 판단은 즉시 알림으로 내보내고,
- * 루틴 미사용처럼 모니터링으로 옮기는 중인 판단은 저장만 해 두고 자체 평가와 비교한다.
+ * 장시간 무활동·장시간 사용은 분석 서비스가 소유하는 판단이라 즉시 알림으로 내보낸다.
+ * 모니터링 자체 평가는 이 판단들을 점수화하지 않는다. 판단에 쓰지 않을 유형(루틴 미사용)은
+ * SHADOW로 두어 저장·화면 표시만 하고, 근거로만 남길 유형은 EVIDENCE로 둔다.
  *
  * <p>되돌리기는 설정 한 줄을 바꾸는 것으로 끝나야 한다. 그래서 유형 표를 코드가 아니라
  * {@code app.risk.event-routing.*}에 둔다. 모르는 유형은 기본값으로 처리해,
@@ -30,6 +31,7 @@ public class EventRoutingPolicy {
     private static final String KEY_SUPPRESS_WHILE_AWAY = "SUPPRESS_WHILE_AWAY";
     /** 기기가 꺼져 있던 구간의 이벤트를 억제할 유형 */
     private static final String KEY_SUPPRESS_WHILE_DEVICE_OFFLINE = "SUPPRESS_WHILE_DEVICE_OFFLINE";
+    /** 예전에 응답 요구 유형을 고르던 키. 지금은 모든 알림이 응답을 받으므로 무시한다. */
     private static final String KEY_RESPONSE_REQUIRED = "RESPONSE_REQUIRED";
     private static final String KEY_RESPONSE_DEADLINE_SECONDS = "RESPONSE_DEADLINE_SECONDS";
 
@@ -58,7 +60,6 @@ public class EventRoutingPolicy {
     private final Route defaultRoute;
     private final Set<String> suppressWhileAway;
     private final Set<String> suppressWhileDeviceOffline;
-    private final Set<String> responseRequired;
     private final Duration responseDeadline;
 
     public EventRoutingPolicy(RiskProperties properties) {
@@ -66,7 +67,6 @@ public class EventRoutingPolicy {
         Route configuredDefault = FALLBACK;
         Set<String> away = Set.of();
         Set<String> deviceOffline = Set.of();
-        Set<String> response = Set.of();
         Duration deadline = Duration.ofSeconds(60);
 
         for (Map.Entry<String, String> entry : properties.getEventRouting().entrySet()) {
@@ -76,7 +76,9 @@ public class EventRoutingPolicy {
                 case KEY_DEFAULT -> configuredDefault = parseRoute(key, value);
                 case KEY_SUPPRESS_WHILE_AWAY -> away = parseSet(value);
                 case KEY_SUPPRESS_WHILE_DEVICE_OFFLINE -> deviceOffline = parseSet(value);
-                case KEY_RESPONSE_REQUIRED -> response = parseSet(value);
+                case KEY_RESPONSE_REQUIRED -> log.warn(
+                        "app.risk.event-routing.response-required는 더 이상 쓰지 않는다. "
+                                + "모든 알림이 응답을 받는다: {}", value);
                 case KEY_RESPONSE_DEADLINE_SECONDS -> deadline = parseDeadline(value, deadline);
                 default -> parsed.put(key, parseRoute(key, value));
             }
@@ -86,7 +88,6 @@ public class EventRoutingPolicy {
         this.defaultRoute = configuredDefault;
         this.suppressWhileAway = away;
         this.suppressWhileDeviceOffline = deviceOffline;
-        this.responseRequired = response;
         this.responseDeadline = deadline;
     }
 
@@ -117,11 +118,6 @@ public class EventRoutingPolicy {
      */
     public boolean suppressWhileDeviceOffline(String eventType) {
         return eventType != null && suppressWhileDeviceOffline.contains(normalize(eventType));
-    }
-
-    /** 대상자 본인의 안전 확인 응답을 요구할 유형인지. */
-    public boolean responseRequired(String eventType) {
-        return eventType != null && responseRequired.contains(normalize(eventType));
     }
 
     public Duration responseDeadline() {

@@ -5,7 +5,7 @@
 ## 의미와 범위
 
 - `EVENT_TIME_REASSESSMENT`: 선택한 정책으로 과거 관측을 재평가한다. 실제 수신 지연, 당시 화면의 히스테리시스, 알림 재발송 이력을 복원한 결과는 아니다.
-- M/I/A 점수와 평가 가능 여부를 계산한다. `PROLONGED_APPLIANCE_USE`의 이벤트 등급과 최종 화면 등급은 별도 경로다.
+- 활동 감소(A) 참고 점수와 평가 가능 여부를 계산한다. `risk_level`은 언제나 null이다(`monitoring-score-v2-A`). 무활동·장시간 사용의 이벤트 등급과 최종 화면 등급은 분석 서비스 이벤트 경로다. 루틴 미사용은 판단에 쓰지 않는다. v1 결과(`monitoring-score-v1-MIA`)는 M/I/A 최대값과 등급을 담고 있어 v2 결과와 섞어 비교하지 않는다.
 - 관측 커버리지와 사용 구간은 기존 `HouseholdObservation`, `ApplianceUsageEpisode`, `ValidUseContract`로 재구성한다. 짧은 사용 제외, 인접 사용 병합, 처음부터 ON인 사용의 시작 추정 표시를 재사용한다.
 - 성공 receipt만으로 snapshot 발행 성공을 증명할 수 없다. raw나 최종 세션만을 snapshot으로 가장하지 않는다. 과거 snapshot이 보관돼 있지 않다면 테스트 분석 재생 시 snapshot을 함께 수집해야 한다. 이 도구는 raw 모델 재추론/시나리오 생성기가 아니다.
 - 파일/상태는 가구별로 분리한다. snapshot은 한 줄당 JSON 하나, `observed_at` 오름차순이어야 한다. 동일한 인접 재전송은 허용하지만 다른 내용의 동일 시각 또는 역순은 실패한다.
