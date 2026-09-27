@@ -26,19 +26,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class RiskProperties {
 
     /** 이 값들로 계산했다는 표시. 정책을 바꾸면 함께 올린다. */
-    private String policyVersion = "policy-v1-experimental";
+    private String policyVersion = "policy-v2-experimental";
 
+    /** 이벤트의 주의 등급을 저장 점수로 옮긴 대표값. */
     private int warningThreshold = 70;
 
+    /** 이벤트의 위험 등급을 저장 점수로 옮긴 대표값. */
     private int dangerThreshold = 90;
-
-    /** 더 높은 등급 후보가 이만큼 유지돼야 실제로 올린다. */
-    private Duration raiseHold = Duration.ofMinutes(10);
-
-    /** 등급을 내리려면 점수가 이 값 아래여야 한다. */
-    private int recoverBelow = 60;
-
-    private Duration recoverHold = Duration.ofMinutes(30);
 
     /** 이 z 이하는 지표 점수 0. 설계 11.2절의 a에 해당하는 실험값이다. */
     private double zLow = 2;
@@ -46,16 +40,10 @@ public class RiskProperties {
     /** 이 z 이상은 지표 점수 1. 설계 11.2절의 b에 해당하는 실험값이다. */
     private double zHigh = 6;
 
-    /** MAD가 0이어도 분모가 0이 되지 않게 하는 최소 변동폭(초). */
-    private double minSpreadSeconds = 900;
-
-    /** 첫 사용 P90과 P50의 간격이 좁을 때 쓰는 최소 유예. */
-    private Duration minGrace = Duration.ofMinutes(30);
-
     /** 프로필 유효기간. 실제 판정은 수신 단계가 하고 여기에는 기록용으로 싣는다. */
     private Duration profileMaxAge = Duration.ofDays(3);
 
-    /** 현재 관측이 이보다 오래되면 무활동·활동량 지표를 계산하지 않는다. */
+    /** 현재 관측이 이보다 오래되면 활동량 지표를 계산하지 않는다. */
     private Duration observationMaxAge = Duration.ofMinutes(15);
 
     /** 같은 등급이 이어질 때 알림을 다시 보내기까지의 최소 간격. */
@@ -96,13 +84,8 @@ public class RiskProperties {
                 policyVersion,
                 warningThreshold,
                 dangerThreshold,
-                raiseHold,
-                recoverBelow,
-                recoverHold,
                 zLow,
                 zHigh,
-                minSpreadSeconds,
-                minGrace,
                 profileMaxAge,
                 observationMaxAge,
                 realertInterval,

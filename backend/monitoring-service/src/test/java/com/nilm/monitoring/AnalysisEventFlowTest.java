@@ -78,6 +78,7 @@ class AnalysisEventFlowTest {
 
     @Test
     void 그림자_유형은_저장만_하고_등급도_알림도_만들지_않는다() {
+        // 루틴 미사용은 판단에 쓰지 않는다. 저장만 하고 등급·알림을 만들지 않는다.
         service.handle(message("ROUTINE_MISSED", "KETTLE"));
 
         assertThat(jdbc.queryForObject("select risk_level from analysis_events", String.class))

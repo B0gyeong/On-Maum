@@ -80,7 +80,7 @@ export default function SubjectAlertHistory({ subject, history, demo = false }: 
       <div className="mt-5 space-y-4">
         {records.map((record) => {
           const highlighted = record.id === selected?.id;
-          const help = record.response?.status === "ANSWERED" && record.response.answer?.toLowerCase() === "yes";
+          const help = record.managerStatus !== "RESOLVED" && record.response?.status === "ANSWERED" && record.response.answer?.toLowerCase() === "yes";
           return (
             <article
               key={record.id}
@@ -90,6 +90,7 @@ export default function SubjectAlertHistory({ subject, history, demo = false }: 
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className={`text-lg font-bold ${help ? "text-red-700" : "text-stone-800"}`}>{record.alertId ? alertResponseText(record.response) : "위험 이벤트 기록"}</h3>
+                {record.managerStatus === "RESOLVED" && <span className="font-semibold text-emerald-700">해결 완료</span>}
                 {record.riskLevel && <span className={`rounded-md px-3 py-1 font-semibold ring-1 ${riskBadgeClass(record.riskLevel)}`}>{riskLabels[record.riskLevel]} · {record.riskScore}점</span>}
               </div>
               {record.description && (

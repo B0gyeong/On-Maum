@@ -1,5 +1,24 @@
 # Monitoring: Kafka 이벤트와 Web Push
 
+## 발표용 로컬 보고서 (Thymeleaf)
+
+`GET /reports/demo/{householdId}`에서 현재 monitoring DB의 가구별 최신 보고서를 로그인 없이 조회합니다.
+예: `http://localhost:8082/reports/demo/H001` (실제 저장된 가구 ID 사용).
+별도 권한 검사나 운영/실험 전환은 없습니다. 보안 활성화 시에도 이 GET 경로만 추가 공개합니다.
+
+- `DEMO_REPORT_DB_URL`, `DEMO_REPORT_DB_USER`, `DEMO_REPORT_DB_PASSWORD`: 생략하면 현재 `spring.datasource` 연결 설정을 사용합니다. 원격 실험 DB 기본 주소는 없습니다.
+- 보고서 조회는 읽기 전용 DataSource/JdbcTemplate을 사용합니다.
+- `infrastructure/local/compose.report-demo.yaml`은 `nilm-net`의 `postgres:5432/monitoring_db`에서 보고서를 읽습니다. 애플리케이션의 JPA/Flyway/예약 작업은 별도 `nilm_report_demo` DB를 사용합니다.
+- 로컬 이미지 `nilm-demo-report:local`과 계정 파일 `infrastructure/local/report-demo.env`를 준비한 후 `docker compose -f infrastructure/local/compose.report-demo.yaml up -d`로 실행합니다.
+- 기존 reporting 조회 뷰 5개를 읽습니다. 가구별 `period_end DESC, generated_at DESC, report_id DESC` 순으로 최신 보고서를 선택합니다.
+- 5개 쿼리는 읽기 전용 REPEATABLE READ 트랜잭션으로 실행해 화면 전체가 같은 보고서 스냅샷을 사용합니다.
+- 요약, 가전별 일일 사용량, 근거 표와 날짜별 유효/부분 평가 최대 점수 차트 하나를 표시합니다.
+- 근거 표는 `?evidencePage=0`부터 페이지당 100건씩 표시합니다. 점수 차트와 사용량 표는 보고서 전체 기간을 유지합니다.
+- 로컬 DB에서 현재 보고서가 있는 가구: [H008](http://localhost:8082/reports/demo/H008), [H009](http://localhost:8082/reports/demo/H009), [H010](http://localhost:8082/reports/demo/H010).
+- 메인 색상은 `#fb7f26`, `#ffffff`입니다. Chart.js 4.4.8을 CDN에서 불러오므로 발표 브라우저의 인터넷 연결이 필요합니다.
+- 가구 보고서가 없으면 404입니다. monitoring DB 접속 및 reporting 뷰 SELECT 권한이 필요합니다.
+- 위 주소는 monitoring-service에 직접 접속하는 주소입니다. 기존 Gateway는 `/reports/**`를 라우팅하지 않으므로 발표 시 서비스 포트 또는 별도로 설정한 프록시를 사용합니다.
+
 ## 이번 구현 범위
 
 - `analysis.event.v1`을 수신하고 JSON 필수 값과 점수 범위를 검증한다.
@@ -176,6 +195,30 @@ V17은 notifications에 created_at/updated_at을 더한다. 기존 행은 응답
 이미 수정된 V2를 DB에 적용했거나 수동으로 같은 테이블을 만든 환경은
 이력과 스키마를 먼저 확인해야 한다. 자동 repair나 데이터 삭제는 하지 않는다.
 
+## 위험 판단의 소유자
+
+판단 하나에는 주인이 하나다. 두 곳이 같은 사건을 각자 판단하면 알림이 겹치고
+화면 등급이 누구의 판단인지 흐려진다.
+
+| 판단 | 소유자 | 모니터링의 처리 (`app.risk.event-routing.*`) |
+| --- | --- | --- |
+| 루틴 미사용 `ROUTINE_MISSED` | 판단에 쓰지 않음 | `SHADOW`. 저장·화면 표시만, 등급·알림 없음 |
+| 장시간 무활동 `PROLONGED_INACTIVITY` | 분석 서비스 | `IMMEDIATE:WARNING` |
+| 장시간 사용 `PROLONGED_APPLIANCE_USE` | 분석 서비스 | `IMMEDIATE:DANGER` |
+| 활동 감소 A | 모니터링 자체 평가 | 참고 점수만. 등급·알림 없음 |
+
+- 알림은 유형과 관계없이 모두 "현재 위험하신가요?"에 예/아니오 응답을 받는다
+  (`app.risk.event-routing.response-deadline-seconds` 안에 답이 없으면 무응답 처리).
+- 화면 등급(`current_risk_level`)은 이벤트 등급 슬롯에서만 온다. 자체 평가는 등급을 내지 않는다
+  (`monitoring-score-v2-A`). 이벤트 등급이 없는 동안 화면 점수는 A 참고 점수다.
+- 이벤트 등급이 이어지는 동안 타이머가 `app.risk.realert-interval`(1시간)마다 다시 알린다.
+  등급은 가전이 꺼지거나 `app.risk.event-level-max-hold`(6시간)가 지나면 해제된다.
+- 무활동은 외출 중이거나 기기가 끊겨 있던 시각의 이벤트면 알리지 않는다.
+- v1(`monitoring-score-v1-MIA`)은 M·I·A 중 최대값으로 등급을 냈다. 그때 남은
+  `assessed_risk_level`·`pending_risk_level`은 다음 평가가 지운다.
+- Gold 프로필의 `routine_baselines`는 계속 받아 저장하고 담당자 프로필 화면에 보여 준다.
+  점수 계산에는 쓰지 않는다.
+
 ## 위험 평가의 현재 입력 계약
 
 평가가 프로필과 맞대는 값은 Gold와 같은 뜻이어야 한다. 세 가지를 맞춰 두었다.
@@ -202,15 +245,12 @@ V17은 notifications에 created_at/updated_at을 더한다. 기존 행은 응답
 초(`covered_seconds`)를 함께 적는다. 스냅샷 간격이 `app.risk.observation-gap-threshold`
 (120초, 분석 서비스의 데이터 공백 기준과 같은 값)를 넘으면 그 사이는 보지 못한 구간이다.
 하루 커버리지가 `app.risk.min-observation-coverage`(0.95, Gold가 기준선 표본으로 받아들이는
-관측일의 하한과 같은 값)에 못 미치면 "오늘 한 번도 쓰지 않았다"를 확정하지 않고
-루틴 미사용(M)과 활동 감소(A)를 제외한다. 무활동(I)은 경과로 세려는 구간에 공백이 있으면
-제외한다. 제외는 0점이 아니다. 등급도 내지 않는다.
+관측일의 하한과 같은 값)에 못 미치면 활동이 적었다고 확정하지 않고 활동 감소(A)를 제외한다.
+제외는 0점이 아니다.
 
-**통합 지점.** 위 입력은 `CurrentStateProvider.of(householdId, away, now)`가 만든다.
-`RiskAssessmentService`의 `CurrentState state = currentState(subject, now);`를
-`CurrentState state = currentStates.of(subject.getHouseholdId(), subject.isAwayAt(now), now);`로
-바꾸면 세 지표가 모두 산다. 그 전까지 옛 경로는 관측 커버리지와 유효 사용을 확인할 수 없어
-M과 A를 `USAGE_UNVERIFIED`로 제외하고 무활동만 계산한다.
+**입력 경로.** 위 입력은 `CurrentStateProvider.of(householdId, away, now)`가 만든다.
+관측 커버리지와 유효 사용을 싣지 않는 옛 입력(`ActivityLedger.coarse`)으로는 A를
+`USAGE_UNVERIFIED`로 제외한다.
 
 ## 현재 동작의 한계
 
@@ -221,5 +261,5 @@ SENT는 한 개 이상의 푸시 서비스 접수 성공이며 사용자 열람�
 푸시 실패 시 이벤트는 유지되며 일반 발송 실패는 FAILED로 기록한다.
 auth_sub가 없는 대상자는 이벤트만 저장하고 알림 생성 생략 로그를 남긴다.
 관측이 끊긴 동안 켜져 있던 가전의 사용시간은 공백까지 포함해 세어져 실제보다 길어진다.
-그 구간은 커버리지가 낮아 M·A가 제외되고, 사용시간이 길어지는 방향은 위험을 낮추는 쪽이다.
+그 구간은 커버리지가 낮아 A가 제외된다.
 스냅샷 계약에 분석 측 품질·커버리지 필드가 없어 모니터링은 자기가 본 것만으로 판정한다.

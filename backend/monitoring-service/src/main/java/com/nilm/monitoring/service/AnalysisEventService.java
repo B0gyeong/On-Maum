@@ -163,13 +163,13 @@ public class AnalysisEventService {
             return;
         }
 
-        boolean responseRequired = routing.responseRequired(message.eventType());
+        // 알림은 모두 "현재 위험하신가요?"에 예/아니오 응답을 받는다. 유형별로 나누지 않는다.
         Notification notification = notifications.createNotification(
                 message.eventId(),
                 null,
                 subject.getId(),
                 subject.getAuthSub(),
-                responseRequired,
+                true,
                 routing.responseDeadline()
         );
         subject.markAlerted(now);
@@ -190,7 +190,7 @@ public class AnalysisEventService {
             publisher.publishEvent(new NotificationReady(
                     notification.getId(),
                     "안전 확인 요청",
-                    responseRequired ? body + ". " + NotificationReady.RESPONSE_QUESTION : body
+                    body + ". " + NotificationReady.RESPONSE_QUESTION
             ));
         } else {
             // 알림 행은 남았는데 폰에 아무것도 안 오는 상황의 이유를 그대로 남긴다.

@@ -3,8 +3,6 @@ package com.nilm.monitoring.domain;
 import com.nilm.monitoring.config.enums.RiskLevel;
 import com.nilm.monitoring.risk.AssessmentStatus;
 import com.nilm.monitoring.risk.RiskAssessment;
-import com.nilm.monitoring.risk.RiskAssessor;
-import com.nilm.monitoring.risk.RiskPolicy;
 import jakarta.persistence.*;
 import lombok.Getter;
 
@@ -82,7 +80,10 @@ public class Subject {
     @Column(name = "current_risk_score", nullable = false)
     private int currentRiskScore;
 
-    /** 모니터링이 스스로 계산한 등급. 평가 불가일 때는 직전 값을 그대로 둔다. */
+    /**
+     * v1 점수식이 스스로 계산하던 등급. v2부터 자체 평가는 등급을 내지 않으므로
+     * 다음 평가가 남은 값을 지운다. 컬럼과 이력 호환을 위해 필드는 남겨 둔다.
+     */
     @Enumerated(EnumType.STRING)
     @Column(name = "assessed_risk_level")
     private RiskLevel assessedRiskLevel;
@@ -104,10 +105,11 @@ public class Subject {
     @Column(name = "last_valid_assessed_at")
     private OffsetDateTime lastValidAssessedAt;
 
+    /** v1 자체 평가 등급이 확정된 시각. v2에서는 더 쓰지 않는다. */
     @Column(name = "risk_level_since")
     private OffsetDateTime riskLevelSince;
 
-    /** 히스테리시스 후보 등급. 유지시간을 채워야 실제로 움직인다. */
+    /** v1 히스테리시스 후보 등급. v2에서는 쓰지 않고 다음 평가가 지운다. */
     @Enumerated(EnumType.STRING)
     @Column(name = "pending_risk_level")
     private RiskLevel pendingRiskLevel;
@@ -239,18 +241,14 @@ public class Subject {
     /**
      * 자체 평가 결과를 반영한다.
      *
-     * <p>VALID가 아니면 등급·점수를 건드리지 않는다. 평가 불가를 0점·정상으로 덮어쓰면
-     * 화면에서 "데이터 없음"과 "정상"을 구분할 수 없게 된다(설계 11.1절).
+     * <p>자체 평가는 참고 점수만 낸다. 등급은 분석 서비스 이벤트가 세운 슬롯이 정한다.
+     * v1 점수식이 세워 둔 등급이나 후보가 남아 있으면 여기서 지운다. 남겨 두면 판단 주체가
+     * 사라진 등급이 해제 경로 없이 화면에 계속 걸린다.
      *
-     * <p>등급 전이에는 히스테리시스를 건다. 임계를 한 번 넘겼다고 바로 올리지 않고,
-     * 같은 후보가 {@code raiseHold} 동안 유지돼야 올린다. 내릴 때도 점수가
-     * {@code recoverBelow} 아래로 {@code recoverHold} 동안 유지돼야 내린다.
+     * <p>VALID가 아니면 점수를 건드리지 않는다. 평가 불가를 0점으로 덮어쓰면
+     * 화면에서 "데이터 없음"과 "평소와 같음"을 구분할 수 없게 된다(설계 11.1절).
      */
-    public AssessmentOutcome applyAssessment(
-            RiskAssessment assessment,
-            RiskPolicy policy,
-            OffsetDateTime now
-    ) {
+    public AssessmentOutcome applyAssessment(RiskAssessment assessment, OffsetDateTime now) {
         RiskLevel before = effectiveRiskLevel();
         AssessmentStatus previousStatus = assessmentStatus;
         Integer previousScore = assessedRiskScore;
@@ -258,15 +256,14 @@ public class Subject {
         this.assessmentStatus = assessment.status();
         this.assessmentConfidence = assessment.confidence();
         this.assessedAt = now;
+        this.assessedRiskLevel = null;
+        this.pendingRiskLevel = null;
+        this.pendingSince = null;
 
         if (assessment.status() == AssessmentStatus.VALID && assessment.score() != null) {
             this.lastValidAssessedAt = now;
-            // 점수는 지금 관측한 값이라 바로 갱신한다. 등급만 유지시간으로 눌러 둔다.
             this.assessedRiskScore = assessment.score();
-            applyHysteresis(assessment.score(), policy, now);
         }
-        // VALID가 아니면 등급·점수를 건드리지 않는다.
-        // 평가 불가를 0점·정상으로 덮어쓰면 "데이터 없음"과 "정상"을 구분할 수 없다.
 
         RiskLevel after = effectiveRiskLevel();
         int score = effectiveRiskScore();
@@ -283,38 +280,6 @@ public class Subject {
             touch(now);
         }
         return new AssessmentOutcome(before != after, changed, before, after);
-    }
-
-    /**
-     * 등급 전이를 유지시간으로 눌러 둔다.
-     * 임계를 한 번 스쳤다고 올리지 않고, 내릴 때도 복귀 임계 아래로 충분히 머물러야 내린다.
-     */
-    private void applyHysteresis(int score, RiskPolicy policy, OffsetDateTime now) {
-        RiskLevel current = assessedRiskLevel == null ? RiskLevel.NORMAL : assessedRiskLevel;
-        RiskLevel candidate = RiskAssessor.levelOf(score, policy);
-
-        if (candidate.compareTo(current) > 0) {
-            if (pendingRiskLevel != candidate) {
-                this.pendingRiskLevel = candidate;
-                this.pendingSince = now;
-            } else if (!now.isBefore(pendingSince.plus(policy.raiseHold()))) {
-                commitAssessedLevel(candidate, now);
-            }
-            return;
-        }
-        if (candidate.compareTo(current) < 0) {
-            if (score >= policy.recoverBelow()) {
-                // 복귀 임계까지 내려오지 않았다. 후보를 세우지 않는다.
-                clearPending();
-            } else if (pendingRiskLevel != candidate) {
-                this.pendingRiskLevel = candidate;
-                this.pendingSince = now;
-            } else if (!now.isBefore(pendingSince.plus(policy.recoverHold()))) {
-                commitAssessedLevel(candidate, now);
-            }
-            return;
-        }
-        clearPending();
     }
 
     /** 알림을 실제로 만든 시각. 같은 등급의 재발송 간격을 여기서 잰다. */
@@ -370,17 +335,6 @@ public class Subject {
             return eventRiskScore == null ? 0 : eventRiskScore;
         }
         return assessedRiskScore == null ? 0 : assessedRiskScore;
-    }
-
-    private void commitAssessedLevel(RiskLevel level, OffsetDateTime now) {
-        this.assessedRiskLevel = level;
-        this.riskLevelSince = now;
-        clearPending();
-    }
-
-    private void clearPending() {
-        this.pendingRiskLevel = null;
-        this.pendingSince = null;
     }
 
     /**
