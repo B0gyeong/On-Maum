@@ -3,6 +3,7 @@ import {
   registerPushSubscription,
   type PushSubscriptionRequest,
 } from "../api/monitoring";
+import { getAppServiceWorkerRegistration } from "./serviceWorker";
 
 export type PushSubscriptionStatus =
   | "unsupported"
@@ -79,7 +80,7 @@ function toRequest(subscription: PushSubscription): PushSubscriptionRequest {
 }
 
 async function getCurrentSubscription(applicationServerKey: Uint8Array<ArrayBuffer>) {
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await getAppServiceWorkerRegistration();
   let subscription = await registration.pushManager.getSubscription();
 
   if (subscription && (isExpired(subscription) || !usesVapidKey(subscription, applicationServerKey))) {
@@ -126,7 +127,7 @@ export function synchronizePushSubscription(requestPermission: boolean) {
 async function performPushUnsubscribe() {
   await synchronizationQueue;
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-  const registration = await navigator.serviceWorker.getRegistration();
+  const registration = await navigator.serviceWorker.getRegistration("/");
   const subscription = await registration?.pushManager.getSubscription();
   if (!subscription) return;
 

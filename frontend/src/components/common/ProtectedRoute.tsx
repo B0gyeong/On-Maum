@@ -47,7 +47,7 @@ export default function ProtectedRoute({ fallback, role }: ProtectedRouteProps) 
           {requestedRoleLabel} 서비스를 이용하려면 현재 계정에서 로그아웃한 뒤 다시 로그인해 주세요.
         </p>
         <button
-          className="mt-8 flex min-h-14 w-full items-center justify-center rounded-xl bg-brand-500 px-5 py-3 font-bold text-stone-900 transition-colors hover:bg-brand-400 disabled:cursor-wait disabled:bg-stone-300"
+          className="mt-8 flex min-h-14 w-full items-center justify-center rounded-xl bg-brand-500 px-5 py-3 font-bold text-white transition-colors hover:bg-brand-600 disabled:cursor-wait disabled:bg-stone-300"
           disabled={loggingOut}
           onClick={logout}
         >

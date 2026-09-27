@@ -52,50 +52,48 @@ export default function DashboardPreviewPage({ danger = false }: { danger?: bool
     : baseSubjects;
 
   return (
-    <main className="min-h-screen bg-stone-100 text-stone-800 lg:grid lg:grid-cols-[250px_1fr]">
-      <aside className="flex items-center gap-4 border-b border-stone-200 bg-white p-4 lg:fixed lg:inset-y-0 lg:w-[250px] lg:flex-col lg:items-stretch lg:border-r lg:border-b-0 lg:p-6">
+    <main className="min-h-screen bg-[#fcfcfb] text-stone-800 lg:grid lg:grid-cols-[250px_1fr]">
+      <aside className="flex items-center gap-4 border-b border-stone-200/70 bg-[#fcfcfb] p-4 lg:fixed lg:inset-y-0 lg:w-[250px] lg:flex-col lg:items-stretch lg:border-b-0 lg:p-7">
         <Brand />
-        <nav className="ml-auto flex gap-1 lg:mt-10 lg:ml-0 lg:grid" aria-label="담당자 메뉴">
-          <span className="flex items-center gap-3 rounded-xl bg-brand-50 px-3 py-3 font-semibold text-brand-700">
+        <nav className="ml-auto flex gap-1 lg:mt-14 lg:ml-0 lg:grid lg:gap-2" aria-label="담당자 메뉴">
+          <span className="flex items-center gap-3 rounded-lg bg-brand-500 px-4 py-3.5 text-base font-semibold text-white ">
             <Icon name="grid" />
             <span className="hidden lg:inline">대시보드</span>
           </span>
-          <span className="flex items-center gap-3 rounded-xl px-3 py-3 font-semibold text-stone-400">
+          <span className="flex items-center gap-3 rounded-lg px-4 py-3.5 text-base font-semibold text-stone-400">
             <Icon name="users" />
             <span className="hidden lg:inline">대상자 관리</span>
           </span>
-          <span className="flex items-center gap-3 rounded-xl px-3 py-3 font-semibold text-stone-400">
+          <span className="flex items-center gap-3 rounded-lg px-4 py-3.5 text-base font-semibold text-stone-400">
             <Icon name="bell" />
             <span className="hidden lg:inline">최근 알림</span>
           </span>
         </nav>
         <div className="mt-auto hidden border-t border-stone-100 pt-5 lg:block">
           <p className="font-bold">복지담당자</p>
-          <p className="text-sm text-stone-500">함께 지키는 안심 일상</p>
+          <p className="text-base text-stone-500">함께 지키는 안심 일상</p>
         </div>
       </aside>
 
-      <div className="lg:col-start-2">
-        <header className="sticky top-0 z-10 flex min-h-16 items-center justify-between border-b border-stone-200 bg-white/90 px-5 backdrop-blur md:px-8">
+      <div className="m-3 ml-0 min-w-0 rounded-[1.75rem] border border-stone-200/80 bg-[#f5f5f4] lg:col-start-2 lg:m-6 lg:ml-0 lg:rounded-[2rem]">
+        <header className="rounded-t-[1.75rem] lg:rounded-t-[2rem] flex min-h-20 items-center justify-between border-b border-stone-200 bg-[#f5f5f4] px-5 md:px-10">
           <strong>대시보드</strong>
-          <span className="flex items-center gap-2 text-sm text-emerald-700">
-            <i className="h-2 w-2 rounded-full bg-emerald-500" /> 실시간 연결됨
+          <span className="flex items-center gap-2 text-sm text-stone-500">
+             실시간 연결됨
           </span>
         </header>
 
-        <div className="mx-auto grid max-w-7xl gap-5 p-5 md:p-8">
+        <div className="mx-auto grid max-w-[1440px] gap-6 p-5 md:p-8 xl:p-10">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-extrabold">오늘의 돌봄 현황</h1>
-              <p className="mt-2 text-stone-500">
-                작은 신호도 놓치지 않도록, 오늘의 일상을 살펴보세요.
-              </p>
+              <h1 className="text-2xl font-bold tracking-tight md:text-[1.875rem]">오늘의 돌봄 현황</h1>
+
             </div>
             <button
-              className="flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-3 font-bold text-brand-900 hover:bg-brand-400"
+              className="flex items-center gap-2 rounded-lg bg-brand-500 px-5 py-3 text-base font-semibold text-white hover:bg-brand-600"
               type="button"
             >
-              <Icon name="users" /> 대상자 등록
+              대상자 등록
             </button>
           </div>
 

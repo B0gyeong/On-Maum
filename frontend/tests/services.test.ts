@@ -55,4 +55,11 @@ describe('도메인 API 서비스', () => {
     authMock.onPost('/monitoring/push-subscriptions', subscription).reply(204)
     await expect(registerPushSubscription(subscription)).resolves.toBeUndefined()
   })
+
+  it('알림 이력의 조회 기간과 다음 페이지 커서를 함께 전송한다', async () => {
+    const range = { from: '2026-06-29', to: '2026-09-26' }
+    authMock.onGet('/monitoring/subjects/1/events', { params: { size: 20, cursor: 'next', ...range } })
+      .reply(200, { events: [], pagination: { hasNext: false, nextCursor: null } })
+    await expect(getSubjectEvents('1', 'next', range)).resolves.toMatchObject({ events: [] })
+  })
 })

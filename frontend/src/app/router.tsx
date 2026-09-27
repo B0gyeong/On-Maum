@@ -5,21 +5,31 @@ import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
 import StaffPage from "../pages/StaffPage";
 import UserPage from "../pages/UserPage";
+import UserPushTestPage from "../pages/UserPushTestPage";
 import SceneDemoPage from "../pages/SceneDemoPage";
+import PriorityDemoPage from "../pages/PriorityDemoPage";
+import DashboardDemoPage from "../pages/DashboardDemoPage";
 
 export const router = createBrowserRouter(
   createRoutesFromElements(
     <>
       <Route path="/" element={<HomePage />} />
       <Route path="/demo/ai" element={<SceneDemoPage />} />
+      <Route path="/demo/priority" element={<PriorityDemoPage />} />
+      <Route path="/demo/dashboard" element={<DashboardDemoPage />}>
+        <Route path="subjects/:subjectId" />
+      </Route>
       <Route path="/dashboard-preview" element={<DashboardPreviewPage />} />
       <Route path="/dashboard-preview-alert" element={<DashboardPreviewPage danger />} />
+      <Route path="/user-push-test" element={<UserPushTestPage />} />
       <Route
         path="/staff"
         element={<ProtectedRoute role="staff" fallback={<LoginPage role="staff" />} />}
       >
-        <Route index element={<StaffPage />} />
-        <Route path="subjects/:subjectId" element={<StaffPage />} />
+        <Route element={<StaffPage />}>
+          <Route index />
+          <Route path="subjects/:subjectId" />
+        </Route>
       </Route>
       <Route
         path="/user"

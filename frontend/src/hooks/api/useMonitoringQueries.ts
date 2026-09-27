@@ -18,10 +18,11 @@ export function useMyDashboardQuery() {
   });
 }
 
-export function useSubjectEventsQuery(subjectId: string, version: number) {
+export function useSubjectEventsQuery(subjectId: string, version: number, options?: { from: string; to: string; enabled?: boolean }) {
   return useInfiniteQuery({
-    queryKey: [...monitoringKeys.events(subjectId), version],
-    queryFn: ({ pageParam }) => getSubjectEvents(subjectId, pageParam),
+    queryKey: [...monitoringKeys.events(subjectId), version, options?.from, options?.to],
+    queryFn: ({ pageParam }) => getSubjectEvents(subjectId, pageParam, options && { from: options.from, to: options.to }),
+    enabled: options?.enabled ?? true,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.pagination.nextCursor ?? undefined,
   });
