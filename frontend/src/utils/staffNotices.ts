@@ -51,6 +51,7 @@ export type RecentAlertItem = {
   time: string;
   source: "stream" | "dashboard";
   targetId: string;
+  resolved?: boolean;
 };
 
 export function getRecentAlerts(subjects: Subject[], history: StaffNotice[]): RecentAlertItem[] {
@@ -65,6 +66,9 @@ export function getRecentAlerts(subjects: Subject[], history: StaffNotice[]): Re
       time: notice.event.updatedAt,
       source: "stream",
       targetId: notice.event.latestAlert?.alertId ?? notice.event.lastDetection?.eventId ?? notice.id,
+      resolved: notice.event.latestAlert?.managerStatus === "RESOLVED"
+        || subjects.some((subject) => subject.latestAlert?.alertId === notice.event.latestAlert?.alertId
+          && subject.latestAlert?.managerStatus === "RESOLVED"),
     }));
 
   for (const subject of subjects) {
@@ -86,6 +90,7 @@ export function getRecentAlerts(subjects: Subject[], history: StaffNotice[]): Re
       time: response.respondedAt ?? subject.updatedAt,
       source: "dashboard",
       targetId: alert.alertId,
+      resolved: alert.managerStatus === "RESOLVED",
     });
   }
 

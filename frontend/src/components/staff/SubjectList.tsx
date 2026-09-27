@@ -13,9 +13,11 @@ type SubjectListProps = {
   dataUpdatedAt: number;
   detailLinks?: boolean;
   basePath?: string;
+  onResolve?: (alertId: string) => void;
+  resolving?: boolean;
 };
 
-export default function SubjectList({ subjects, loading, dataUpdatedAt, detailLinks = true, basePath = "/staff" }: SubjectListProps) {
+export default function SubjectList({ subjects, loading, dataUpdatedAt, detailLinks = true, basePath = "/staff", onResolve, resolving = false }: SubjectListProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"ALL" | Risk>("ALL");
   const visible = useMemo(
@@ -122,7 +124,18 @@ export default function SubjectList({ subjects, loading, dataUpdatedAt, detailLi
                   </span>
                 </td>
                 <td className={`font-bold tabular-nums ${subject.riskLevel === "DANGER" ? "text-red-700" : ""}`}>{subject.riskScore}점</td>
-                <td>{responseLabel(subject.latestAlert?.subjectResponse)}</td>
+                <td>
+                  {subject.latestAlert?.managerStatus === "RESOLVED" ? "해결 완료" : responseLabel(subject.latestAlert?.subjectResponse)}
+                  {onResolve && isHelpRequested(subject.latestAlert) && subject.latestAlert && (
+                    <button
+                      type="button"
+                      className="ml-3 rounded-lg border border-brand-300 px-3 py-2 text-sm font-semibold text-brand-700 disabled:opacity-50"
+                      disabled={resolving}
+                      onClick={() => onResolve(subject.latestAlert!.alertId)}
+                      aria-label={`${subject.name} 도움 요청 해결 완료`}
+                    >해결 완료</button>
+                  )}
+                </td>
                 {detailLinks && <td>
                   <Link
                     className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-stone-300 bg-white px-4 py-2 text-base font-semibold text-stone-800 transition-colors hover:border-brand-400 hover:bg-brand-50 hover:text-stone-900"

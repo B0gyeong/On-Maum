@@ -1,4 +1,7 @@
 import { useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { resolveNotification, type SubjectsResponse } from "../api/monitoring";
+import { monitoringKeys } from "../hooks/api/monitoringKeys";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getApiErrorMessage } from "../api/client";
 import { clearSession } from "../api/tokenStorage";
@@ -17,6 +20,7 @@ import SubjectList from "../components/staff/SubjectList";
 import { useMeQuery, useSubjectsQuery } from "../hooks/api";
 import { useSubjectStream } from "../hooks/realtime/useSubjectStream";
 import { unsubscribeFromPush } from "../services/pushSubscription";
+import { applyStaffDemoSubjects, LIVE_SUBJECT_ID } from "../utils/staffDemo";
 
 export default function StaffPage() {
   const navigate = useNavigate();
@@ -25,9 +29,28 @@ export default function StaffPage() {
   const query = useSubjectsQuery();
   const meQuery = useMeQuery();
   const stream = useSubjectStream();
+  const queryClient = useQueryClient();
+  const resolveMutation = useMutation({
+    mutationFn: resolveNotification,
+    onSuccess: (_data, alertId) => {
+      stream.resolveAlert(alertId);
+      queryClient.setQueryData<SubjectsResponse>(monitoringKeys.subjects, (current) => current && ({
+        ...current,
+        subjects: current.subjects.map((subject) => subject.latestAlert?.alertId === alertId
+          ? { ...subject, latestAlert: { ...subject.latestAlert, managerStatus: "RESOLVED", managerStatusUpdatedAt: new Date().toISOString() } }
+          : subject),
+      }));
+      void queryClient.invalidateQueries({ queryKey: monitoringKeys.subjects });
+    },
+  });
   const [registering, setRegistering] = useState(false);
   const [feedback, setFeedback] = useState("");
-  const subjects = useMemo(() => query.data?.subjects ?? [], [query.data?.subjects]);
+  const subjects = useMemo(() => applyStaffDemoSubjects(query.data?.subjects ?? []), [query.data?.subjects]);
+  const notices = stream.notices.filter((notice) => notice.event.subjectId === LIVE_SUBJECT_ID
+    && notice.event.latestAlert?.managerStatus !== "RESOLVED"
+    && !subjects.some((subject) => subject.latestAlert?.alertId === notice.event.latestAlert?.alertId
+      && subject.latestAlert?.managerStatus === "RESOLVED"));
+  const history = stream.history.filter((notice) => notice.event.subjectId === LIVE_SUBJECT_ID);
   const requestedView = searchParams.get("view");
   const view: StaffView = staffNavigation.some((item) => item.key === requestedView)
     ? (requestedView as StaffView)
@@ -68,10 +91,15 @@ export default function StaffPage() {
           refreshing={query.isFetching}
           onRefresh={() => void query.refetch()}
         />
-        <div className={`mx-auto grid max-w-[1440px] gap-6 p-5 md:p-8 xl:p-10 ${showNotifications && stream.notices.length ? "pb-32 md:pb-32 xl:pb-32" : ""}`}>
+        <div className={`mx-auto grid max-w-[1440px] gap-6 p-5 md:p-8 xl:p-10 ${showNotifications && notices.length ? "pb-32 md:pb-32 xl:pb-32" : ""}`}>
           {query.isError && (
             <p className="rounded-xl bg-red-50 p-4 text-red-700" role="alert">
               {getApiErrorMessage(query.error)}
+            </p>
+          )}
+          {resolveMutation.isError && (
+            <p className="rounded-xl bg-red-50 p-4 text-red-700" role="alert">
+              해결 처리에 실패했습니다. {getApiErrorMessage(resolveMutation.error)} 다시 시도해 주세요.
             </p>
           )}
           {stream.connection === "disconnected" && (
@@ -79,7 +107,7 @@ export default function StaffPage() {
               실시간 연결이 끊겨 재연결 중입니다. {stream.error}
             </p>
           )}
-          {showNotifications && <StaffNotifications notices={stream.notices} subjects={subjects} onDismiss={stream.dismissNotice} />}
+          {showNotifications && <StaffNotifications notices={notices} subjects={subjects} onDismiss={stream.dismissNotice} />}
           {subjectId ? (
             <>
               <Link
@@ -90,7 +118,7 @@ export default function StaffPage() {
                 대상자 목록
               </Link>
               {selected ? (
-                <SubjectDetail subject={selected} history={stream.history} />
+                <SubjectDetail subject={selected} history={history} demo={selected.subjectId !== LIVE_SUBJECT_ID} />
               ) : (
                 <section className="rounded-2xl bg-white p-10 text-center text-stone-500">
                   {query.isLoading
@@ -121,19 +149,21 @@ export default function StaffPage() {
                 </>
               )}
               {view === "alerts" ? (
-                <RecentAlerts subjects={subjects} history={stream.history} loading={query.isLoading} />
+                <RecentAlerts subjects={subjects} history={history} loading={query.isLoading} />
               ) : (
                 <SubjectList
                   subjects={subjects}
                   loading={query.isLoading}
                   dataUpdatedAt={query.dataUpdatedAt}
+                  onResolve={(alertId) => resolveMutation.mutate(alertId)}
+                  resolving={resolveMutation.isPending}
                 />
               )}
             </>
           )}
           {feedback && (
             <p
-              className={`fixed right-5 rounded-xl bg-stone-800 px-5 py-3 text-white shadow-lg ${showNotifications && stream.notices.length ? "bottom-28" : "bottom-5"}`}
+              className={`fixed right-5 rounded-xl bg-stone-800 px-5 py-3 text-white shadow-lg ${showNotifications && notices.length ? "bottom-28" : "bottom-5"}`}
               role="status"
             >
               {feedback}
