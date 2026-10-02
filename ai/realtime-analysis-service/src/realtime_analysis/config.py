@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     analysis_run_id: str = Field(default="realtime-v1", min_length=1, max_length=100)
     analysis_pipeline_version: str = Field(default="1", min_length=1, max_length=50)
     analysis_expected_samples_per_day: int = Field(default=86_400, ge=1)
+    # 일일 관측 샘플 수를 메모리에 누적한 뒤 DB에 반영하는 주기(초). 0이면 메시지마다 즉시 쓴다.
+    analysis_observation_flush_seconds: float = Field(default=5.0, ge=0, le=300)
     analysis_observation_valid_coverage_ratio: float = Field(
         default=0.95,
         ge=0,

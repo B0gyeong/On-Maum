@@ -34,6 +34,8 @@ class MeasurementHandler(Protocol):
 
     def reset_household(self, household_id: str) -> None: ...
 
+    def flush_observations(self) -> int: ...
+
 
 class AnalysisConsumer:
     def __init__(
@@ -55,6 +57,7 @@ class AnalysisConsumer:
         self._consumer = consumer or Consumer(settings.consumer_config())
         self._metrics = metrics
         self._lag_refresh_seconds = settings.consumer_lag_refresh_seconds
+        self._observation_flush_seconds = settings.analysis_observation_flush_seconds
         self._households_by_partition: dict[PartitionKey, set[str]] = {}
         self._assigned_partitions: set[PartitionKey] = set()
 
@@ -67,6 +70,7 @@ class AnalysisConsumer:
         )
         logger.info("Kafka consumer started: topic=%s", self._input_topic)
         next_lag_refresh = time.monotonic()
+        next_observation_flush = time.monotonic() + self._observation_flush_seconds
         # consumer는 계속 메시지 기다림 
         try:
             while not stop_event.is_set():
@@ -77,6 +81,12 @@ class AnalysisConsumer:
                 if now >= next_lag_refresh:
                     self._refresh_consumer_lag()
                     next_lag_refresh = now + self._lag_refresh_seconds
+                # 일일 관측 샘플 수는 메시지마다 쓰지 않고 주기적으로 한 번에 DB에 반영한다.
+                # 실패하면 예외가 루프를 벗어나 프로세스가 재시작되고, 커밋되지 않은
+                # Offset부터 재처리되므로 at-least-once 특성은 유지된다.
+                if self._observation_flush_seconds > 0 and now >= next_observation_flush:
+                    self._handler.flush_observations()
+                    next_observation_flush = now + self._observation_flush_seconds
                 if message is None:
                     continue
                 if message.error():
@@ -88,8 +98,28 @@ class AnalysisConsumer:
                     poll_duration_ns=poll_duration_ns,
                 )
         finally:
+            # close()가 Offset을 커밋하기 전에 누적값을 DB에 남긴다.
+            self._flush_observations_safely("shutdown")
             self._consumer.close()
             logger.info("Kafka consumer stopped")
+
+    def _flush_observations_safely(self, reason: str) -> None:
+        """리밸런싱 콜백과 종료 경로에서는 flush 실패가 Consumer를 멈추지 않게 한다."""
+
+        try:
+            flushed = self._handler.flush_observations()
+        except Exception:
+            logger.exception(
+                "Observation flush failed: reason=%s (pending counts are kept for retry)",
+                reason,
+            )
+            return
+        if flushed:
+            logger.info(
+                "Observation counts flushed: reason=%s household_days=%s",
+                reason,
+                flushed,
+            )
 
     def process_message(
         self,
@@ -223,6 +253,9 @@ class AnalysisConsumer:
     ) -> None:
         """Reset only households owned by partitions being revoked."""
 
+        # cooperative revoke에서는 librdkafka가 저장된 Offset을 커밋하므로, 반납하는
+        # 가구의 누적 관측값을 먼저 DB에 반영해야 새 소유 Consumer와 이어진다.
+        self._flush_observations_safely("revoke")
         reset_count = self._discard_partition_state(partitions)
         self._metrics.record_consumer_rebalance("revoke")
         self._metrics.set_assigned_partitions(len(self._assigned_partitions))
@@ -240,6 +273,8 @@ class AnalysisConsumer:
     ) -> None:
         """Reset state for partitions lost before a normal revoke completed."""
 
+        # lost는 Offset 커밋이 보장되지 않아 새 소유 Consumer가 같은 입력을 다시 집계한다.
+        # flush 대신 reset_household()에서 누적값을 버려 이중 집계를 막는다.
         reset_count = self._discard_partition_state(partitions)
         self._metrics.record_consumer_rebalance("lost")
         self._metrics.set_assigned_partitions(len(self._assigned_partitions))

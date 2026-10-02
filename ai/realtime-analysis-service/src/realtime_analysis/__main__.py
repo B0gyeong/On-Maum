@@ -142,6 +142,7 @@ def main() -> None:
         emission_repository=SqlAlchemyEventEmissionRepository(session_factory),
         outing_state_provider=outing_state_repository,
     )
+    detector.log_evaluation_intervals()
     bootstrap_baselines = BaselineRepository.from_json_file(
         settings.baseline_file
     )
@@ -161,6 +162,7 @@ def main() -> None:
         session_factory=session_factory,
         timezone_name=settings.analysis_timezone,
         expected_samples_per_day=settings.analysis_expected_samples_per_day,
+        observation_flush_seconds=settings.analysis_observation_flush_seconds,
     )
     event_publisher = AnalysisEventPublisher(settings)
     data_quality_monitor = DataQualityMonitor(

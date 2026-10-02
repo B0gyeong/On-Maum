@@ -348,3 +348,225 @@ def test_next_day_input_keeps_previous_day_collecting_until_daily_job(
         current = observations[("H001", "2026-09-11")]
         assert current.observation_status == "COLLECTING"
         assert current.sample_count == 1
+
+
+def buffered_repository(
+    session_factory: sessionmaker[Session],
+) -> SqlAlchemyApplianceActivityRepository:
+    return SqlAlchemyApplianceActivityRepository(
+        session_factory,
+        "Asia/Seoul",
+        expected_samples_per_day=4,
+        observation_flush_seconds=5,
+    )
+
+
+def test_buffered_observations_are_written_only_on_flush(
+    session_factory: sessionmaker[Session],
+) -> None:
+    repository = buffered_repository(session_factory)
+
+    repository.record_observation("H001", START)
+    repository.record_observation("H001", START + timedelta(seconds=1))
+    repository.record_observation("H001", START + timedelta(seconds=2))
+
+    with session_factory() as session:
+        assert session.scalar(select(HouseholdObservationDaily)) is None
+    assert repository.pending_observation_count == 1
+
+    assert repository.flush_observations() == 1
+    assert repository.pending_observation_count == 0
+    assert repository.flush_observations() == 0
+
+    with session_factory() as session:
+        observation = session.scalar(select(HouseholdObservationDaily))
+        assert observation is not None
+        assert observation.sample_count == 3
+        assert observation.coverage_ratio == Decimal("0.7500")
+        assert observation.observation_status == "COLLECTING"
+        assert observation.updated_at.replace(tzinfo=None) == (
+            START + timedelta(seconds=2)
+        ).replace(tzinfo=None)
+
+
+def test_buffered_flush_adds_to_existing_row_and_skips_replayed_samples(
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory.begin() as session:
+        session.add(
+            HouseholdObservationDaily(
+                household_id="H001",
+                observation_date=START.date(),
+                sample_count=2,
+                expected_sample_count=4,
+                coverage_ratio=Decimal("0.5000"),
+                observation_status="COLLECTING",
+                updated_at=START,
+            )
+        )
+    repository = buffered_repository(session_factory)
+
+    # 재시작 후 재처리된 입력(updated_at 이하)은 DB 기준값으로 걸러진다.
+    repository.record_observation("H001", START - timedelta(seconds=1))
+    repository.record_observation("H001", START)
+    repository.record_observation("H001", START + timedelta(seconds=1))
+    # 같은 시각이 한 번 더 오면 메모리 기준값으로 걸러진다.
+    repository.record_observation("H001", START + timedelta(seconds=1))
+    repository.record_observation("H001", START + timedelta(seconds=2))
+
+    assert repository.flush_observations() == 1
+
+    with session_factory() as session:
+        observation = session.scalar(select(HouseholdObservationDaily))
+        assert observation is not None
+        assert observation.sample_count == 4
+        assert observation.coverage_ratio == Decimal("1.0000")
+
+
+def test_buffered_finalized_day_ignores_late_samples(
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory.begin() as session:
+        session.add(
+            HouseholdObservationDaily(
+                household_id="H001",
+                observation_date=START.date(),
+                sample_count=3,
+                expected_sample_count=4,
+                coverage_ratio=Decimal("0.7500"),
+                observation_status="VALID",
+                updated_at=START,
+            )
+        )
+    repository = buffered_repository(session_factory)
+
+    repository.record_observation("H001", START + timedelta(seconds=1))
+    repository.record_observation("H001", START + timedelta(seconds=2))
+
+    assert repository.pending_observation_count == 0
+    assert repository.flush_observations() == 0
+    with session_factory() as session:
+        observation = session.scalar(select(HouseholdObservationDaily))
+        assert observation is not None
+        assert observation.sample_count == 3
+
+
+def test_buffered_flush_failure_keeps_pending_counts_for_retry(
+    session_factory: sessionmaker[Session],
+) -> None:
+    class FlakySessionFactory:
+        def __init__(self) -> None:
+            self.fail_next_begin = True
+
+        def __call__(self):
+            return session_factory()
+
+        def begin(self):
+            if self.fail_next_begin:
+                self.fail_next_begin = False
+                raise RuntimeError("database unavailable")
+            return session_factory.begin()
+
+    flaky = FlakySessionFactory()
+    repository = SqlAlchemyApplianceActivityRepository(
+        flaky,  # type: ignore[arg-type]
+        "Asia/Seoul",
+        expected_samples_per_day=4,
+        observation_flush_seconds=5,
+    )
+    repository.record_observation("H001", START)
+    repository.record_observation("H001", START + timedelta(seconds=1))
+
+    with pytest.raises(RuntimeError):
+        repository.flush_observations()
+    assert repository.pending_observation_count == 1
+
+    # 실패 후 도착한 샘플은 되돌려 둔 누적값과 합쳐진다.
+    repository.record_observation("H001", START + timedelta(seconds=2))
+    assert repository.flush_observations() == 1
+
+    with session_factory() as session:
+        observation = session.scalar(select(HouseholdObservationDaily))
+        assert observation is not None
+        assert observation.sample_count == 3
+
+
+def test_discard_pending_observations_drops_only_that_household(
+    session_factory: sessionmaker[Session],
+) -> None:
+    repository = buffered_repository(session_factory)
+    repository.record_observation("H001", START)
+    repository.record_observation("H001", START + timedelta(seconds=1))
+    repository.record_observation("H002", START)
+
+    repository.discard_pending_observations("H001")
+
+    assert repository.pending_observation_count == 1
+    assert repository.flush_observations() == 1
+    with session_factory() as session:
+        observations = {
+            item.household_id: item
+            for item in session.scalars(select(HouseholdObservationDaily)).all()
+        }
+        assert set(observations) == {"H002"}
+        assert observations["H002"].sample_count == 1
+
+    # 파티션을 다시 받으면 DB 기준값을 새로 읽으므로 이전 시각의 입력도 정상 집계된다.
+    repository.record_observation("H001", START)
+    assert repository.flush_observations() == 1
+    with session_factory() as session:
+        observations = {
+            item.household_id: item
+            for item in session.scalars(select(HouseholdObservationDaily)).all()
+        }
+        assert observations["H001"].sample_count == 1
+
+
+def test_immediate_mode_writes_every_sample_and_flush_is_noop(
+    session_factory: sessionmaker[Session],
+) -> None:
+    repository = SqlAlchemyApplianceActivityRepository(
+        session_factory,
+        "Asia/Seoul",
+        expected_samples_per_day=4,
+        observation_flush_seconds=0,
+    )
+    repository.record_observation("H001", START)
+
+    with session_factory() as session:
+        observation = session.scalar(select(HouseholdObservationDaily))
+        assert observation is not None
+        assert observation.sample_count == 1
+    assert repository.pending_observation_count == 0
+    assert repository.flush_observations() == 0
+
+
+def test_buffered_flush_updates_coverage_below_cap_in_place(
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory.begin() as session:
+        session.add(
+            HouseholdObservationDaily(
+                household_id="H001",
+                observation_date=START.date(),
+                sample_count=1,
+                expected_sample_count=4,
+                coverage_ratio=Decimal("0.2500"),
+                observation_status="COLLECTING",
+                updated_at=START,
+            )
+        )
+    repository = buffered_repository(session_factory)
+    repository.record_observation("H001", START + timedelta(seconds=1))
+    repository.record_observation("H001", START + timedelta(seconds=2))
+
+    assert repository.flush_observations() == 1
+
+    with session_factory() as session:
+        observation = session.scalar(select(HouseholdObservationDaily))
+        assert observation is not None
+        assert observation.sample_count == 3
+        assert observation.coverage_ratio == Decimal("0.7500")
+        assert observation.updated_at.replace(tzinfo=None) == (
+            START + timedelta(seconds=2)
+        ).replace(tzinfo=None)

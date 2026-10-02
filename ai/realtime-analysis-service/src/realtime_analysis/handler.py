@@ -73,6 +73,7 @@ class MeasurementHandler:
         """Discard volatile state whose Kafka partition ownership was lost."""
 
         self._buffer.reset(household_id)
+        self._activity_repository.discard_pending_observations(household_id)
         self._state_transition_detector.reset(household_id)
         if self._data_quality_monitor is not None:
             self._data_quality_monitor.reset(household_id)
@@ -81,6 +82,11 @@ class MeasurementHandler:
         self._warming_households.discard(household_id)
         self._metrics.set_warmup_households(len(self._warming_households))
         logger.info("Volatile household state reset: household=%s", household_id)
+
+    def flush_observations(self) -> int:
+        """메모리에 누적한 일일 관측 샘플 수를 DB에 반영하고 반영한 가구·날짜 수를 돌려준다."""
+
+        return self._activity_repository.flush_observations()
 
     def __call__(
         self,
@@ -224,15 +230,18 @@ class MeasurementHandler:
 
         # 가구 ID로 baseline을 찾음 
         with stage("anomaly_detection"):
-            baselines = self._baseline_repository.find_by_household(
-                measurement.household_id,
-                measurement.measured_at,
-            )
-            anomalies = self._detector.detect(
-                measurement.household_id,
-                measurement.measured_at,
-                baselines,
-            )
+            # 하위 stage로 나눠 기준선 조회와 패턴 평가 중 어디에 시간이 쓰이는지 분리한다.
+            with stage("anomaly_baselines"):
+                baselines = self._baseline_repository.find_by_household(
+                    measurement.household_id,
+                    measurement.measured_at,
+                )
+            with stage("anomaly_evaluate"):
+                anomalies = self._detector.detect(
+                    measurement.household_id,
+                    measurement.measured_at,
+                    baselines,
+                )
         for anomaly in anomalies:
             with stage("event_publish_ack"):
                 self._event_publisher.publish(anomaly.event)

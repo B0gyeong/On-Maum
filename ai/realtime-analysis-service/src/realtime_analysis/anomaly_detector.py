@@ -1,5 +1,6 @@
 """Realtime risk-event detection from baselines and persisted usage sessions."""
 
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from time import perf_counter
@@ -22,6 +23,7 @@ from realtime_analysis.policy import SqlAlchemyPolicyRepository
 from realtime_analysis.schemas import AnalysisEvent, RoutineBaseline
 from realtime_analysis.state_tracker import DailyActivityTracker
 
+logger = logging.getLogger(__name__)
 
 ANALYSIS_EVENT_NAMESPACE = UUID("73e26131-3092-4d4d-baf5-b18cb9778757")
 
@@ -415,8 +417,10 @@ class RealtimeAnomalyDetector:
             + timedelta(hours=policy.cooldown_hours)
         )
 
-    def _is_due(self, household_id: str, observed_at: datetime) -> bool:
-        intervals = []
+    def evaluation_intervals(self) -> dict[str, int]:
+        """정책별 평가 주기(초). 게이트는 이 중 최솟값을 사용한다."""
+
+        intervals: dict[str, int] = {}
         for event_type in (
             "ROUTINE_MISSED",
             "PROLONGED_INACTIVITY",
@@ -424,10 +428,30 @@ class RealtimeAnomalyDetector:
         ):
             policy = self._policies.get(event_type)
             if policy is not None:
-                intervals.append(
-                    int(policy.parameters.get("evaluation_interval_seconds", 60))
+                intervals[event_type] = int(
+                    policy.parameters.get("evaluation_interval_seconds", 60)
                 )
-        interval = min(intervals, default=60)
+        return intervals
+
+    def log_evaluation_intervals(self) -> None:
+        """실제 적용되는 평가 주기를 시작 시 한 번 남긴다.
+
+        DB의 정책 행이 JSON 기본값과 다르면(예: 시연용 1초) 모든 메시지가 평가 경로를
+        타서 anomaly_detection 단계 비용이 10ms 이상 커지므로, 부하 측정 전에 확인할 수
+        있도록 기록한다.
+        """
+
+        intervals = self.evaluation_intervals()
+        effective = min(intervals.values(), default=60)
+        log = logger.warning if effective < 60 else logger.info
+        log(
+            "Risk event evaluation interval: effective=%ss policies=%s",
+            effective,
+            intervals,
+        )
+
+    def _is_due(self, household_id: str, observed_at: datetime) -> bool:
+        interval = min(self.evaluation_intervals().values(), default=60)
         previous = self._last_evaluated_at.get(household_id)
         return bool(
             previous is None

@@ -252,3 +252,125 @@ def test_lost_resets_only_households_from_lost_partitions() -> None:
     assert registry.get_sample_value(
         "nilm_analysis_household_state_resets_total"
     ) == 1
+
+
+def test_revoke_flushes_observations_before_resetting_households() -> None:
+    consumer = Mock()
+    handler = Mock()
+    handler.flush_observations.return_value = 1
+    analysis_consumer = service(consumer, Mock(), handler)
+    stop_event = Event()
+    stop_event.set()
+    analysis_consumer.run(stop_event)
+    handler.reset_mock()
+    on_assign = consumer.subscribe.call_args.kwargs["on_assign"]
+    on_revoke = consumer.subscribe.call_args.kwargs["on_revoke"]
+    partition_zero = TopicPartition("power.raw.v1", 0)
+
+    on_assign(consumer, [partition_zero])
+    analysis_consumer.process_message(kafka_message(payload(), partition=0))
+    handler.reset_mock()
+
+    on_revoke(consumer, [partition_zero])
+
+    assert handler.mock_calls == [
+        call.flush_observations(),
+        call.reset_household("H001"),
+    ]
+
+
+def test_revoke_continues_when_observation_flush_fails() -> None:
+    consumer = Mock()
+    handler = Mock()
+    handler.flush_observations.side_effect = RuntimeError("database unavailable")
+    analysis_consumer = service(consumer, Mock(), handler)
+    stop_event = Event()
+    stop_event.set()
+    analysis_consumer.run(stop_event)
+    on_assign = consumer.subscribe.call_args.kwargs["on_assign"]
+    on_revoke = consumer.subscribe.call_args.kwargs["on_revoke"]
+    partition_zero = TopicPartition("power.raw.v1", 0)
+    on_assign(consumer, [partition_zero])
+    analysis_consumer.process_message(kafka_message(payload(), partition=0))
+
+    on_revoke(consumer, [partition_zero])
+
+    assert handler.reset_household.call_args_list == [call("H001")]
+
+
+def test_lost_does_not_flush_observations() -> None:
+    consumer = Mock()
+    handler = Mock()
+    analysis_consumer = service(consumer, Mock(), handler)
+    stop_event = Event()
+    stop_event.set()
+    analysis_consumer.run(stop_event)
+    on_assign = consumer.subscribe.call_args.kwargs["on_assign"]
+    on_lost = consumer.subscribe.call_args.kwargs["on_lost"]
+    partition_zero = TopicPartition("power.raw.v1", 0)
+    on_assign(consumer, [partition_zero])
+    analysis_consumer.process_message(kafka_message(payload(), partition=0))
+    handler.reset_mock()
+
+    on_lost(consumer, [partition_zero])
+
+    assert handler.flush_observations.call_count == 0
+    assert handler.reset_household.call_args_list == [call("H001")]
+
+
+def test_run_flushes_observations_on_interval_and_shutdown(monkeypatch) -> None:
+    consumer = Mock()
+    handler = Mock()
+    handler.flush_observations.return_value = 0
+    stop_event = Event()
+
+    def poll(timeout: float) -> None:
+        if consumer.poll.call_count >= 2:
+            stop_event.set()
+        return None
+
+    consumer.poll.side_effect = poll
+    # 초기화 2회(lag, flush) 후 루프 1회차 10초, 2회차 11초로 시간이 흐른다.
+    monotonic = Mock(side_effect=[0.0, 0.0, 10.0, 11.0])
+    monkeypatch.setattr("realtime_analysis.consumer.time.monotonic", monotonic)
+    settings = Settings(_env_file=None, analysis_observation_flush_seconds=5)
+    analysis_consumer = AnalysisConsumer(
+        settings=settings,
+        dlq_publisher=Mock(),
+        handler=handler,
+        consumer=consumer,
+    )
+
+    analysis_consumer.run(stop_event)
+
+    # 10초 시점에 주기 flush 1회, 종료 시 1회
+    assert handler.flush_observations.call_count == 2
+    assert consumer.close.call_count == 1
+
+
+def test_run_skips_interval_flush_when_disabled(monkeypatch) -> None:
+    consumer = Mock()
+    handler = Mock()
+    handler.flush_observations.return_value = 0
+    stop_event = Event()
+
+    def poll(timeout: float) -> None:
+        if consumer.poll.call_count >= 2:
+            stop_event.set()
+        return None
+
+    consumer.poll.side_effect = poll
+    monotonic = Mock(side_effect=[0.0, 0.0, 10.0, 11.0])
+    monkeypatch.setattr("realtime_analysis.consumer.time.monotonic", monotonic)
+    settings = Settings(_env_file=None, analysis_observation_flush_seconds=0)
+    analysis_consumer = AnalysisConsumer(
+        settings=settings,
+        dlq_publisher=Mock(),
+        handler=handler,
+        consumer=consumer,
+    )
+
+    analysis_consumer.run(stop_event)
+
+    # 즉시 쓰기 모드에서는 종료 시 flush(no-op)만 호출된다.
+    assert handler.flush_observations.call_count == 1

@@ -29,9 +29,14 @@ from urllib.request import urlopen
 MIB = 1024 * 1024
 IMPORTANT_STAGES = (
     "observation_db",
+    "observation_flush",
     "inference",
     "activity_db",
+    "activity_sessions",
+    "activity_receipt",
     "snapshot_publish_ack",
+    "anomaly_baselines",
+    "anomaly_evaluate",
     "anomaly_detection",
     "event_publish_ack",
     "offset_store",

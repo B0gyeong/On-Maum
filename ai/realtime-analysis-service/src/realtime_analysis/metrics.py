@@ -143,6 +143,11 @@ class AnalysisMetrics:
             "Households currently refilling their model input window.",
             registry=registry,
         )
+        self.pending_observations = Gauge(
+            "nilm_analysis_observation_pending_households",
+            "Household-day observation counts buffered in memory awaiting flush.",
+            registry=registry,
+        )
         self.model = Info(
             "nilm_analysis_model",
             "Currently loaded analysis model.",
@@ -263,6 +268,9 @@ class AnalysisMetrics:
 
     def set_warmup_households(self, count: int) -> None:
         self.warmup_households.set(max(count, 0))
+
+    def set_pending_observations(self, count: int) -> None:
+        self.pending_observations.set(max(count, 0))
 
     def set_model_info(self, name: str, version: str) -> None:
         self.model.info({"name": name, "version": version})
