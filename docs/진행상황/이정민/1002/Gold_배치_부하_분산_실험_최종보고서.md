@@ -496,8 +496,10 @@ awk -F, 'NR>1 && ($8=="0"||$8=="10") {k=$2; n[k]++; s[k]+=$10} END{for(k in n) p
 | 두 서버 `/home/ubuntu/cross-host/` | 2부 스크립트 (저장소 `experiments/cross-host/`와 동일) |
 | 저장소 `docs/진행상황/이정민/1001/` | 중간 정리(1부·2부 요약) |
 | 저장소 `docs/진행상황/이정민/1002/` | 이 문서 |
+| 저장소 `docs/진행상황/이정민/1002/data/` | **원본 CSV 사본**: `cluster-repeat-results.csv`, `bench-results.csv`, `cross-results.csv`, `cpu-by-run.csv`, `run-dates/all-run-dates.csv`(115행), `stats-ec2b-15s.csv.gz`, 1부 스크립트 `bin/`, 2부 스크립트 `cross-host/` |
+| 로컬 `C:_on_maumackup\experiments.tgz` | 위 전부 + 드라이버 로그 97개, `config.json`, `result.json`, `batch-*.env` (서버 종료 전 10/2 백업) |
 
-EC2-B 자료 전체 사본(스크립트, env, 결과 CSV, 모든 `run-dates.csv`, 오류 발췌, 회차별 CPU 평균 `cpu-by-run.csv`)은 보고서 작성 시점에 로컬로 받아 두었다. 서버 파일은 삭제하지 않았다.
+EC2-B 자료는 10/2 서버 종료 전에 전부 로컬로 받았다(위 표). 서버는 10/2 17:56 KST 이후 접속 불가.
 
 ---
 
